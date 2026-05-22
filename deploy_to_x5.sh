@@ -59,7 +59,7 @@ cd "${WS_DIR}"
 packages=(
   "src/gps/handsfree_rtk"
   "src/gps/gps_waypoint_nav"
-  "src/base/diff_drive_udp"
+  "src/gps/diff_drive_udp"
 )
 
 if [[ "${WITH_WEED_LOCATOR}" == "1" ]]; then
