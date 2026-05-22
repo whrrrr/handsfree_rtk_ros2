@@ -24,6 +24,7 @@ setup(
             'clear_waypoints = gps_waypoint_nav.clear_waypoints:main',
             'capture_waypoint = gps_waypoint_nav.capture_waypoint:main',
             'waypoint_follower = gps_waypoint_nav.waypoint_follower:main',
+            'rtk_http_bridge = gps_waypoint_nav.rtk_http_bridge:main',
         ],
     },
 )

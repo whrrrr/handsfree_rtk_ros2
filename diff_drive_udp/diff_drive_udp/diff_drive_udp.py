@@ -3,6 +3,7 @@ import socket
 
 import rclpy
 from geometry_msgs.msg import Twist
+from rcl_interfaces.msg import SetParametersResult
 from rclpy.node import Node
 
 
@@ -14,7 +15,7 @@ class DiffDriveUdp(Node):
         self.declare_parameter('esp32_ip', '192.168.153.239')
         self.declare_parameter('esp32_port', 8888)
         self.declare_parameter('wheel_base_m', 0.355)
-        self.declare_parameter('max_wheel_speed_mps', 0.25)
+        self.declare_parameter('max_wheel_speed_mps', 0.0)
         self.declare_parameter('min_effective_speed_mps', 0.12)
         self.declare_parameter('send_rate_hz', 10.0)
         self.declare_parameter('cmd_timeout_sec', 0.5)
@@ -35,6 +36,7 @@ class DiffDriveUdp(Node):
         self.invert_right = bool(self.get_parameter('invert_right').value)
         self.swap_wheels = bool(self.get_parameter('swap_wheels').value)
         self.enabled = bool(self.get_parameter('enabled').value)
+        self.add_on_set_parameters_callback(self.on_set_parameters)
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.last_cmd_time = None
@@ -47,9 +49,50 @@ class DiffDriveUdp(Node):
         self.create_timer(period, self.on_timer)
 
         self.get_logger().info(
-            'UDP diff drive ready: %s -> %s:%d, wheel_base=%.3fm, max=%.2fm/s, min=%.2fm/s'
+            'UDP diff drive ready: %s -> %s:%d, wheel_base=%.3fm, max=%s, min=%.2fm/s'
             % (self.cmd_vel_topic, self.esp32_ip, self.esp32_port, self.wheel_base_m,
-               self.max_wheel_speed_mps, self.min_effective_speed_mps))
+               self._max_speed_text(), self.min_effective_speed_mps))
+
+    def _max_speed_text(self):
+        if self.max_wheel_speed_mps <= 0.0:
+            return 'unlimited'
+        return '%.2fm/s' % self.max_wheel_speed_mps
+
+    def on_set_parameters(self, params):
+        for param in params:
+            if param.name == 'esp32_ip':
+                ip = str(param.value).strip()
+                try:
+                    socket.inet_aton(ip)
+                except OSError:
+                    return SetParametersResult(successful=False, reason='invalid esp32_ip')
+                self.esp32_ip = ip
+            elif param.name == 'esp32_port':
+                port = int(param.value)
+                if port <= 0 or port > 65535:
+                    return SetParametersResult(successful=False, reason='invalid esp32_port')
+                self.esp32_port = port
+            elif param.name == 'enabled':
+                self.enabled = bool(param.value)
+            elif param.name == 'wheel_base_m':
+                self.wheel_base_m = float(param.value)
+            elif param.name == 'max_wheel_speed_mps':
+                self.max_wheel_speed_mps = abs(float(param.value))
+            elif param.name == 'min_effective_speed_mps':
+                self.min_effective_speed_mps = abs(float(param.value))
+            elif param.name == 'cmd_timeout_sec':
+                self.cmd_timeout_sec = float(param.value)
+            elif param.name == 'invert_left':
+                self.invert_left = bool(param.value)
+            elif param.name == 'invert_right':
+                self.invert_right = bool(param.value)
+            elif param.name == 'swap_wheels':
+                self.swap_wheels = bool(param.value)
+
+        self.get_logger().info(
+            'updated target: %s:%d enabled=%s'
+            % (self.esp32_ip, self.esp32_port, self.enabled))
+        return SetParametersResult(successful=True)
 
     def on_cmd_vel(self, msg):
         linear = float(msg.linear.x)
@@ -75,7 +118,8 @@ class DiffDriveUdp(Node):
         if abs(speed) < 1e-6:
             return 0.0
 
-        speed = max(-self.max_wheel_speed_mps, min(self.max_wheel_speed_mps, speed))
+        if self.max_wheel_speed_mps > 0.0:
+            speed = max(-self.max_wheel_speed_mps, min(self.max_wheel_speed_mps, speed))
         if abs(speed) < self.min_effective_speed_mps:
             speed = math.copysign(self.min_effective_speed_mps, speed)
         return speed

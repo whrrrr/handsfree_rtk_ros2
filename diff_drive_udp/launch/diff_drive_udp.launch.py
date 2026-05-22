@@ -9,7 +9,7 @@ def generate_launch_description():
         DeclareLaunchArgument('esp32_ip', default_value='192.168.153.239'),
         DeclareLaunchArgument('esp32_port', default_value='8888'),
         DeclareLaunchArgument('wheel_base_m', default_value='0.355'),
-        DeclareLaunchArgument('max_wheel_speed_mps', default_value='0.25'),
+        DeclareLaunchArgument('max_wheel_speed_mps', default_value='0.0'),
         DeclareLaunchArgument('min_effective_speed_mps', default_value='0.12'),
         DeclareLaunchArgument('send_rate_hz', default_value='10.0'),
         DeclareLaunchArgument('cmd_timeout_sec', default_value='0.5'),

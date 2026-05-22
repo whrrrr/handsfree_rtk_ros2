@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RTK HTTP 控制台</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --line: #334155;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --ok: #10b981;
+      --warn: #f59e0b;
+      --btn: #1d4ed8;
+      --btn2: #475569;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: linear-gradient(140deg, #0b1225, #111827 55%, #1f2937);
+      color: var(--text);
+      font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    }
+    .wrap { max-width: 980px; margin: 20px auto; padding: 0 14px 24px; }
+    .card {
+      background: rgba(17, 24, 39, 0.95);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+    h1 { margin: 0 0 10px; font-size: 22px; }
+    h2 { margin: 0 0 10px; font-size: 16px; color: #cbd5e1; }
+    .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 10px; }
+    .col-3 { grid-column: span 3; }
+    .col-4 { grid-column: span 4; }
+    .col-6 { grid-column: span 6; }
+    .col-8 { grid-column: span 8; }
+    .col-12 { grid-column: span 12; }
+    @media (max-width: 860px) {
+      .col-3, .col-4, .col-6, .col-8 { grid-column: span 12; }
+    }
+    label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 5px; }
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px;
+      background: #0b1220;
+      color: var(--text);
+      font-size: 14px;
+    }
+    textarea { min-height: 100px; resize: vertical; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    button {
+      border: 1px solid #1e3a8a;
+      border-radius: 6px;
+      padding: 8px 12px;
+      color: #fff;
+      background: var(--btn);
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button.secondary {
+      border-color: #475569;
+      background: var(--btn2);
+    }
+    .log {
+      white-space: pre-wrap;
+      background: #020617;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px;
+      min-height: 180px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+    }
+    .ok { color: var(--ok); }
+    .warn { color: var(--warn); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>RTK HTTP 控制台</h1>
+      <div class="grid">
+        <div class="col-4">
+          <label>Base URL</label>
+          <input id="baseUrl" value="http://127.0.0.1:8080">
+        </div>
+        <div class="col-4">
+          <label>API Path</label>
+          <input id="apiPath" value="/api/command">
+        </div>
+        <div class="col-4">
+          <label>Method</label>
+          <select id="method">
+            <option>POST</option>
+            <option>GET</option>
+            <option>PUT</option>
+          </select>
+        </div>
+        <div class="col-6">
+          <label>Header: Content-Type</label>
+          <select id="contentType">
+            <option value="application/json">application/json</option>
+            <option value="text/plain">text/plain</option>
+          </select>
+        </div>
+        <div class="col-6">
+          <label>Header: Authorization (可选)</label>
+          <input id="auth" placeholder="Bearer xxxxx">
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button onclick="testHttp()">测试HTTP连接</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>快捷命令（JSON 包）</h2>
+      <div class="row">
+        <button onclick="sendJson({cmd:'enable_nav', value:true})">导航启用</button>
+        <button onclick="sendJson({cmd:'enable_nav', value:false})" class="secondary">导航停用</button>
+        <button onclick="sendJson({cmd:'capture_waypoint'})">打点</button>
+        <button onclick="sendJson({cmd:'clear_waypoints'})" class="secondary">清空航点</button>
+        <button onclick="sendJson({cmd:'start_follow'})">开始跟踪</button>
+        <button onclick="sendJson({cmd:'stop'})" class="secondary">急停</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>控制板目标地址（ESP32 UDP）</h2>
+      <div class="grid">
+        <div class="col-6">
+          <label>控制板 IP</label>
+          <input id="controlIp" value="192.168.54.239">
+        </div>
+        <div class="col-6">
+          <label>控制板端口</label>
+          <input id="controlPort" type="number" value="8888">
+        </div>
+      </div>
+      <div class="row">
+        <button onclick="applyControlTarget()">应用到底盘节点</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>HTTP 遥控小车（cmd_vel）</h2>
+      <div class="grid">
+        <div class="col-6">
+          <label>线速度 linear_x (m/s)</label>
+          <input id="teleopLinear" type="number" step="0.01" value="0.12">
+        </div>
+        <div class="col-6">
+          <label>角速度 angular_z (rad/s)</label>
+          <input id="teleopAngular" type="number" step="0.01" value="0.50">
+        </div>
+      </div>
+      <div class="row">
+        <button class="secondary" onclick="setTeleopSpeed(0.08, 0.35)">低速</button>
+        <button class="secondary" onclick="setTeleopSpeed(0.12, 0.50)">中速</button>
+        <button class="secondary" onclick="setTeleopSpeed(0.18, 0.70)">高速</button>
+        <button class="secondary" onclick="setTeleopSpeed(0.25, 0.90)">最快</button>
+      </div>
+      <div class="row">
+        <button id="btnForward">前进</button>
+        <button id="btnBackward">后退</button>
+        <button id="btnLeft">左转</button>
+        <button id="btnRight">右转</button>
+        <button onclick="teleopStop()" class="secondary">停止</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>自定义 JSON</h2>
+      <div class="grid">
+        <div class="col-12">
+          <label>Body (JSON)</label>
+          <textarea id="jsonBody">{"cmd":"capture_waypoint","name":"p1"}</textarea>
+        </div>
+      </div>
+      <div class="row">
+        <button onclick="sendCustomJson()">发送 JSON</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>自定义文本</h2>
+      <div class="grid">
+        <div class="col-12">
+          <label>Body (Text)</label>
+          <textarea id="textBody">START_FOLLOW</textarea>
+        </div>
+      </div>
+      <div class="row">
+        <button onclick="sendCustomText()">发送 Text</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>日志</h2>
+      <div id="log" class="log"></div>
+      <div class="row" style="margin-top:8px">
+        <button class="secondary" onclick="clearLog()">清空日志</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function endpoint() {
+      const base = document.getElementById('baseUrl').value.trim().replace(/\/+$/, '');
+      const path = document.getElementById('apiPath').value.trim();
+      return `${base}${path.startsWith('/') ? path : '/' + path}`;
+    }
+
+    function logLine(text, cls) {
+      const node = document.getElementById('log');
+      const t = new Date().toLocaleTimeString();
+      const line = document.createElement('div');
+      if (cls) line.className = cls;
+      line.textContent = `[${t}] ${text}`;
+      node.appendChild(line);
+      node.scrollTop = node.scrollHeight;
+    }
+
+    function clearLog() {
+      document.getElementById('log').innerHTML = '';
+    }
+
+    async function sendRaw(body) {
+      const url = endpoint();
+      const method = document.getElementById('method').value;
+      const contentType = document.getElementById('contentType').value;
+      const auth = document.getElementById('auth').value.trim();
+      const headers = { 'Content-Type': contentType };
+      if (auth) headers['Authorization'] = auth;
+
+      logLine(`-> ${method} ${url}`);
+      logLine(`-> body: ${body}`);
+
+      try {
+        const resp = await fetch(url, {
+          method,
+          headers,
+          body: method === 'GET' ? undefined : body,
+        });
+        const txt = await resp.text();
+        if (resp.ok) {
+          logLine(`<- ${resp.status} ${txt || '(empty)'}`, 'ok');
+        } else {
+          logLine(`<- ${resp.status} ${txt || '(error)'}`, 'warn');
+        }
+      } catch (err) {
+        logLine(`xx 请求失败: ${err.message}`, 'warn');
+        logLine('提示: 若跨域报错，请让地瓜派接口加 CORS 头。', 'warn');
+      }
+    }
+
+    function sendJson(obj) {
+      document.getElementById('contentType').value = 'application/json';
+      sendRaw(JSON.stringify(obj));
+    }
+
+    async function testHttp() {
+      const url = document.getElementById('baseUrl').value.trim().replace(/\/+$/, '') + '/healthz';
+      logLine(`-> GET ${url}`);
+      try {
+        const resp = await fetch(url);
+        const txt = await resp.text();
+        logLine(`<- ${resp.status} ${txt || '(empty)'}`, resp.ok ? 'ok' : 'warn');
+      } catch (err) {
+        logLine(`xx HTTP连接失败: ${err.message}`, 'warn');
+      }
+    }
+
+    function sendCustomJson() {
+      const text = document.getElementById('jsonBody').value.trim();
+      try {
+        const obj = JSON.parse(text);
+        document.getElementById('contentType').value = 'application/json';
+        sendRaw(JSON.stringify(obj));
+      } catch (err) {
+        logLine(`JSON 格式错误: ${err.message}`, 'warn');
+      }
+    }
+
+    function sendCustomText() {
+      const text = document.getElementById('textBody').value;
+      document.getElementById('contentType').value = 'text/plain';
+      sendRaw(text);
+    }
+
+    function teleop(linearX, angularZ) {
+      const vx = Number(linearX);
+      const wz = Number(angularZ);
+      sendJson({
+        cmd: 'cmd_vel',
+        linear_x: vx,
+        angular_z: wz
+      });
+    }
+
+    function setTeleopSpeed(linear, angular) {
+      document.getElementById('teleopLinear').value = Number(linear).toFixed(2);
+      document.getElementById('teleopAngular').value = Number(angular).toFixed(2);
+      logLine(`速度档位: linear_x=${Number(linear).toFixed(2)} m/s, angular_z=${Number(angular).toFixed(2)} rad/s`, 'ok');
+    }
+
+    function readNumber(id, fallback) {
+      const value = Number(document.getElementById(id).value);
+      return Number.isFinite(value) ? value : fallback;
+    }
+
+    function teleopForward() {
+      const v = readNumber('teleopLinear', 0);
+      teleop(v, 0);
+    }
+
+    function teleopBackward() {
+      const v = readNumber('teleopLinear', 0);
+      teleop(-Math.abs(v), 0);
+    }
+
+    function teleopLeft() {
+      const w = readNumber('teleopAngular', 0);
+      teleop(0, Math.abs(w));
+    }
+
+    function teleopRight() {
+      const w = readNumber('teleopAngular', 0);
+      teleop(0, -Math.abs(w));
+    }
+
+    function teleopStop() {
+      teleop(0, 0);
+    }
+
+    function applyControlTarget() {
+      const ip = document.getElementById('controlIp').value.trim();
+      const port = Number(document.getElementById('controlPort').value || 8888);
+      sendJson({
+        cmd: 'set_control_ip',
+        ip: ip,
+        port: port
+      });
+    }
+
+    let holdTimer = null;
+    let holding = false;
+
+    function startHold(sendFn) {
+      stopHold();
+      holding = true;
+      sendFn();
+      holdTimer = setInterval(() => {
+        if (!holding) return;
+        sendFn();
+      }, 160);
+    }
+
+    function stopHold() {
+      holding = false;
+      if (holdTimer) {
+        clearInterval(holdTimer);
+        holdTimer = null;
+      }
+      teleopStop();
+    }
+
+    function bindHold(buttonId, sendFn) {
+      const btn = document.getElementById(buttonId);
+      if (!btn) return;
+
+      btn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        startHold(sendFn);
+      });
+      btn.addEventListener('mouseup', stopHold);
+      btn.addEventListener('mouseleave', stopHold);
+
+      btn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        startHold(sendFn);
+      }, { passive: false });
+      btn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        stopHold();
+      }, { passive: false });
+      btn.addEventListener('touchcancel', stopHold);
+    }
+
+    bindHold('btnForward', teleopForward);
+    bindHold('btnBackward', teleopBackward);
+    bindHold('btnLeft', teleopLeft);
+    bindHold('btnRight', teleopRight);
+
+    window.addEventListener('mouseup', stopHold);
+    window.addEventListener('blur', stopHold);
+  </script>
+</body>
+</html>
