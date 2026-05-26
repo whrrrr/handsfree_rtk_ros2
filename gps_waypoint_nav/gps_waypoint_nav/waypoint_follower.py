@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import rclpy
 from geometry_msgs.msg import PoseStamped, Twist
 from nav_msgs.msg import Path
+from rcl_interfaces.msg import SetParametersResult
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from sensor_msgs.msg import NavSatFix, NavSatStatus
@@ -27,6 +28,7 @@ class WaypointFollower(Node):
         self.declare_parameter('enabled', False)
         self.declare_parameter('gnss_topic', 'handsfree/rtk/gnss')
         self.declare_parameter('cog_topic', 'handsfree/rtk/cog')
+        self.declare_parameter('heading_topic', 'handsfree/rtk/heading')
         self.declare_parameter('cmd_vel_topic', '/cmd_vel')
         self.declare_parameter('waypoint_latitudes', Parameter.Type.DOUBLE_ARRAY)
         self.declare_parameter('waypoint_longitudes', Parameter.Type.DOUBLE_ARRAY)
@@ -61,16 +63,19 @@ class WaypointFollower(Node):
         self.previous_xy = None
         self.latest_heading = None
         self.cog_heading = None
+        self.true_heading = None
         self.track_path = Path()
         self.track_path.header.frame_id = self.frame_id
 
         gnss_topic = self.get_parameter('gnss_topic').value
         cog_topic = self.get_parameter('cog_topic').value
+        heading_topic = self.get_parameter('heading_topic').value
         cmd_vel_topic = self.get_parameter('cmd_vel_topic').value
         control_rate_hz = float(self.get_parameter('control_rate_hz').value)
 
         self.create_subscription(NavSatFix, gnss_topic, self._on_fix, 20)
         self.create_subscription(Float64, cog_topic, self._on_cog, 20)
+        self.create_subscription(Float64, heading_topic, self._on_heading, 20)
         self.cmd_pub = self.create_publisher(Twist, cmd_vel_topic, 10)
         self.status_pub = self.create_publisher(String, '~/status', 10)
         self.target_pub = self.create_publisher(NavSatFix, '~/target_fix', 10)
@@ -78,11 +83,84 @@ class WaypointFollower(Node):
         self.track_path_pub = self.create_publisher(Path, '~/track_path', 1)
         self.marker_pub = self.create_publisher(Marker, '~/target_marker', 1)
 
+        self.add_on_set_parameters_callback(self._on_set_parameters)
         self.timer = self.create_timer(1.0 / max(1.0, control_rate_hz), self._control_loop)
 
         self.get_logger().info(
             'Loaded %d waypoints, enabled=%s, gnss_topic=%s, cmd_vel_topic=%s'
             % (len(self.waypoints), self.enabled, gnss_topic, cmd_vel_topic))
+
+    def _on_set_parameters(self, params):
+        waypoint_latitudes = None
+        waypoint_longitudes = None
+        waypoint_names = None
+        for param in params:
+            if param.name == 'enabled':
+                enabled = bool(param.value)
+                if enabled and not self.enabled:
+                    if waypoint_latitudes is not None or waypoint_longitudes is not None or waypoint_names is not None:
+                        self.waypoints = self._waypoints_from_values(
+                            waypoint_latitudes, waypoint_longitudes, waypoint_names)
+                    else:
+                        self.waypoints = self._load_waypoints()
+                    self.active_index = 0
+                    self.get_logger().info(
+                        'Navigation enabled, reloaded %d waypoints' % len(self.waypoints))
+                elif not enabled and self.enabled:
+                    self.cmd_pub.publish(Twist())
+                    self.get_logger().info('Navigation disabled, stop published once')
+                self.enabled = enabled
+            elif param.name == 'arrival_radius_m':
+                self.arrival_radius_m = float(param.value)
+            elif param.name == 'max_linear_speed':
+                self.max_linear_speed = float(param.value)
+            elif param.name == 'min_linear_speed':
+                self.min_linear_speed = float(param.value)
+            elif param.name == 'max_angular_speed':
+                self.max_angular_speed = float(param.value)
+            elif param.name == 'heading_kp':
+                self.heading_kp = float(param.value)
+            elif param.name == 'slow_radius_m':
+                self.slow_radius_m = float(param.value)
+            elif param.name == 'large_heading_error_rad':
+                self.large_heading_error_rad = float(param.value)
+            elif param.name == 'require_fix':
+                self.require_fix = bool(param.value)
+            elif param.name == 'waypoint_latitudes':
+                waypoint_latitudes = list(param.value)
+            elif param.name == 'waypoint_longitudes':
+                waypoint_longitudes = list(param.value)
+            elif param.name == 'waypoint_names':
+                waypoint_names = list(param.value)
+        if waypoint_latitudes is not None or waypoint_longitudes is not None or waypoint_names is not None:
+            self.waypoints = self._waypoints_from_values(
+                waypoint_latitudes, waypoint_longitudes, waypoint_names)
+        return SetParametersResult(successful=True)
+
+    def _waypoints_from_values(self, latitudes=None, longitudes=None, names=None):
+        if latitudes is None:
+            latitudes = list(self.get_parameter_or(
+                'waypoint_latitudes',
+                Parameter('waypoint_latitudes', Parameter.Type.DOUBLE_ARRAY, [])
+            ).value)
+        if longitudes is None:
+            longitudes = list(self.get_parameter_or(
+                'waypoint_longitudes',
+                Parameter('waypoint_longitudes', Parameter.Type.DOUBLE_ARRAY, [])
+            ).value)
+        if names is None:
+            names = list(self.get_parameter_or(
+                'waypoint_names',
+                Parameter('waypoint_names', Parameter.Type.STRING_ARRAY, [])
+            ).value)
+
+        if len(latitudes) != len(longitudes):
+            raise ValueError('waypoint_latitudes and waypoint_longitudes must have the same length')
+        waypoints = []
+        for i, (lat, lon) in enumerate(zip(latitudes, longitudes)):
+            name = names[i] if i < len(names) else 'wp_%d' % (i + 1)
+            waypoints.append(Waypoint(float(lat), float(lon), str(name)))
+        return waypoints
 
     def _load_waypoints(self):
         latitudes = list(self.get_parameter_or(
@@ -126,6 +204,9 @@ class WaypointFollower(Node):
     def _on_cog(self, msg):
         self.cog_heading = math.radians(float(msg.data))
 
+    def _on_heading(self, msg):
+        self.true_heading = math.radians(float(msg.data))
+
     def _update_heading_from_motion(self):
         if self.previous_xy is None or self.latest_xy is None:
             return
@@ -150,7 +231,7 @@ class WaypointFollower(Node):
 
     def _control_loop(self):
         if not self.enabled:
-            self._publish_stop('disabled')
+            self._publish_status('disabled')
             return
         if not self.waypoints:
             self._publish_stop('no waypoints configured')
@@ -182,9 +263,9 @@ class WaypointFollower(Node):
             self._publish_stop('arrived %s' % target.name)
             return
 
-        heading = self.cog_heading if self.cog_heading is not None else self.latest_heading
+        heading, heading_source = self._select_heading()
         if heading is None:
-            self._publish_stop('waiting for heading / COG')
+            self._publish_stop('waiting for heading / COG / motion heading')
             return
 
         heading_error = wrap_angle(target_bearing - heading)
@@ -197,9 +278,18 @@ class WaypointFollower(Node):
         cmd.angular.z = angular
         self.cmd_pub.publish(cmd)
         self._publish_status(
-            'tracking %s %d/%d: distance=%.2fm heading_error=%.1fdeg v=%.2f w=%.2f'
+            'tracking %s %d/%d: distance=%.2fm heading_error=%.1fdeg v=%.2f w=%.2f source=%s'
             % (target.name, self.active_index + 1, len(self.waypoints), distance,
-               math.degrees(heading_error), linear, angular))
+               math.degrees(heading_error), linear, angular, heading_source))
+
+    def _select_heading(self):
+        if self.true_heading is not None:
+            return self.true_heading, 'heading'
+        if self.cog_heading is not None:
+            return self.cog_heading, 'cog'
+        if self.latest_heading is not None:
+            return self.latest_heading, 'motion'
+        return None, 'none'
 
     def _linear_speed(self, distance, abs_heading_error):
         if abs_heading_error > self.large_heading_error_rad:

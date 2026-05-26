@@ -5,30 +5,23 @@ gps_waypoint_follower:
     cog_topic: handsfree/rtk/cog
     cmd_vel_topic: /cmd_vel
     waypoint_latitudes:
-    - 31.2305426395
-    - 31.230542475166665
-    - 31.230536607833333
-    - 31.230529068833334
-    - 31.2305342915
+    - 31.201439438666668
+    - 31.201513949166667
+    - 31.20156692
+    - 31.201598631333333
+    - 31.201464729833333
+    - 31.201442404
     waypoint_longitudes:
-    - 120.61912834683334
-    - 120.61919922733334
-    - 120.61929326283334
-    - 120.61920026083334
-    - 120.619271544
+    - 121.5772558825
+    - 121.57727692116667
+    - 121.577281616
+    - 121.57728143583333
+    - 121.57728750116667
+    - 121.577255686
     waypoint_names:
-    - p1
-    - p2
-    - p3
-    - p4
-    - p5
-    arrival_radius_m: 0.5
-    max_linear_speed: 0.35
-    min_linear_speed: 0.06
-    max_angular_speed: 0.8
-    heading_kp: 1.4
-    slow_radius_m: 2.0
-    large_heading_error_rad: 1.2
-    control_rate_hz: 10.0
-    require_fix: true
-    frame_id: gps_map
+    - wp_1
+    - wp_2
+    - wp_3
+    - wp_4
+    - wp_5
+    - wp_6

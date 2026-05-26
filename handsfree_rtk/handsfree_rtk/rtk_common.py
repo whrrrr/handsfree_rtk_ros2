@@ -89,6 +89,23 @@ def parse_nmea_sentence(sentence):
                 'valid': parts[2].startswith('A') if parts[2] else False,
             }
 
+        if sentence.startswith('#UNIHEADINGA'):
+            if ';' not in sentence:
+                return None
+            payload = sentence.split(';', 1)[1].split('*', 1)[0]
+            parts = payload.split(',')
+            if len(parts) < 4:
+                return None
+            return {
+                'type': 'UNIHEADINGA',
+                'solution_status': parts[0],
+                'position_type': parts[1],
+                'baseline_m': to_float(parts[2], None),
+                'heading': to_float(parts[3], None),
+                'pitch': to_float(parts[4], None) if len(parts) > 4 else None,
+                'valid': parts[0] == 'SOL_COMPUTED' and parts[1] not in ('NONE', 'INVALID', ''),
+            }
+
         return None
     except Exception:
         return None

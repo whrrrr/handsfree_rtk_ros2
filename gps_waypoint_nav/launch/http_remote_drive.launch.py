@@ -10,6 +10,7 @@ def generate_launch_description():
     wheel_base_m = LaunchConfiguration('wheel_base_m')
     max_wheel_speed_mps = LaunchConfiguration('max_wheel_speed_mps')
     min_effective_speed_mps = LaunchConfiguration('min_effective_speed_mps')
+    invert_linear = LaunchConfiguration('invert_linear')
     http_host = LaunchConfiguration('http_host')
     http_port = LaunchConfiguration('http_port')
 
@@ -19,6 +20,7 @@ def generate_launch_description():
         DeclareLaunchArgument('wheel_base_m', default_value='0.355'),
         DeclareLaunchArgument('max_wheel_speed_mps', default_value='0.0'),
         DeclareLaunchArgument('min_effective_speed_mps', default_value='0.12'),
+        DeclareLaunchArgument('invert_linear', default_value='true'),
         DeclareLaunchArgument('http_host', default_value='0.0.0.0'),
         DeclareLaunchArgument('http_port', default_value='8080'),
         Node(
@@ -32,6 +34,7 @@ def generate_launch_description():
                 'wheel_base_m': wheel_base_m,
                 'max_wheel_speed_mps': max_wheel_speed_mps,
                 'min_effective_speed_mps': min_effective_speed_mps,
+                'invert_linear': invert_linear,
             }],
         ),
         Node(

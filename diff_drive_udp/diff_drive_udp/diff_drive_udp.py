@@ -19,6 +19,7 @@ class DiffDriveUdp(Node):
         self.declare_parameter('min_effective_speed_mps', 0.12)
         self.declare_parameter('send_rate_hz', 10.0)
         self.declare_parameter('cmd_timeout_sec', 0.5)
+        self.declare_parameter('invert_linear', True)
         self.declare_parameter('invert_left', False)
         self.declare_parameter('invert_right', False)
         self.declare_parameter('swap_wheels', False)
@@ -32,6 +33,7 @@ class DiffDriveUdp(Node):
         self.min_effective_speed_mps = abs(float(self.get_parameter('min_effective_speed_mps').value))
         self.send_rate_hz = float(self.get_parameter('send_rate_hz').value)
         self.cmd_timeout_sec = float(self.get_parameter('cmd_timeout_sec').value)
+        self.invert_linear = bool(self.get_parameter('invert_linear').value)
         self.invert_left = bool(self.get_parameter('invert_left').value)
         self.invert_right = bool(self.get_parameter('invert_right').value)
         self.swap_wheels = bool(self.get_parameter('swap_wheels').value)
@@ -82,6 +84,8 @@ class DiffDriveUdp(Node):
                 self.min_effective_speed_mps = abs(float(param.value))
             elif param.name == 'cmd_timeout_sec':
                 self.cmd_timeout_sec = float(param.value)
+            elif param.name == 'invert_linear':
+                self.invert_linear = bool(param.value)
             elif param.name == 'invert_left':
                 self.invert_left = bool(param.value)
             elif param.name == 'invert_right':
@@ -97,6 +101,8 @@ class DiffDriveUdp(Node):
     def on_cmd_vel(self, msg):
         linear = float(msg.linear.x)
         angular = float(msg.angular.z)
+        if self.invert_linear:
+            linear = -linear
 
         left = linear - angular * self.wheel_base_m / 2.0
         right = linear + angular * self.wheel_base_m / 2.0

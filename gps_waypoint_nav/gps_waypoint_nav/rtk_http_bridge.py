@@ -12,6 +12,7 @@ import rclpy
 from geometry_msgs.msg import Twist
 from rcl_interfaces.msg import Parameter as ParameterMsg
 from rcl_interfaces.msg import ParameterType, ParameterValue
+from rcl_interfaces.srv import GetParameters
 from rcl_interfaces.srv import SetParameters
 from rclpy.node import Node
 from sensor_msgs.msg import NavSatFix, NavSatStatus
@@ -22,8 +23,29 @@ except ImportError:
     yaml = None
 
 
+def _parent_dirs(path):
+    current = os.path.abspath(path)
+    while True:
+        yield current
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
+
+
 def _default_waypoint_file():
-    return '/home/wyy/github/src/handsfree_rtk_ros2/gps_waypoint_nav/config/waypoints.yaml'
+    for base_dir in _parent_dirs(os.getcwd()):
+        candidates = (
+            os.path.join(base_dir, 'src', 'gps', 'gps_waypoint_nav', 'config', 'waypoints.yaml'),
+            os.path.join(base_dir, 'gps_waypoint_nav', 'config', 'waypoints.yaml'),
+            os.path.join(base_dir, 'config', 'waypoints.yaml'),
+        )
+        for path in candidates:
+            if os.path.exists(path):
+                return path
+    return os.path.join(
+        os.path.expanduser('~'),
+        'cc_ws', 'tros_ws', 'src', 'gps', 'gps_waypoint_nav', 'config', 'waypoints.yaml')
 
 
 class RtkHttpBridge(Node):
@@ -43,6 +65,7 @@ class RtkHttpBridge(Node):
         self.host = str(self.get_parameter('host').value)
         self.port = int(self.get_parameter('port').value)
         self.api_path = str(self.get_parameter('api_path').value)
+        self.cmd_vel_topic = str(self.get_parameter('cmd_vel_topic').value)
         self.follower_node = str(self.get_parameter('follower_node').value)
         self.diff_drive_node = str(self.get_parameter('diff_drive_node').value)
         self.waypoint_file = str(self.get_parameter('waypoint_file').value)
@@ -60,7 +83,9 @@ class RtkHttpBridge(Node):
             self._on_fix,
             20,
         )
-        self.cmd_pub = self.create_publisher(Twist, str(self.get_parameter('cmd_vel_topic').value), 10)
+        self.cmd_pub = self.create_publisher(Twist, self.cmd_vel_topic, 10)
+        self._get_param_client = self.create_client(
+            GetParameters, f'{self.follower_node.rstrip("/")}/get_parameters')
         self._set_param_client = self.create_client(
             SetParameters, f'{self.follower_node.rstrip("/")}/set_parameters')
         self._set_diff_drive_param_client = self.create_client(
@@ -187,12 +212,20 @@ class RtkHttpBridge(Node):
             return False, 'set_parameters service unavailable'
 
         req = SetParameters.Request()
-        req.parameters = [
+        parameters = []
+        if enabled:
+            ok, waypoint_params_or_msg = self._waypoint_parameters_from_file()
+            if not ok:
+                return False, waypoint_params_or_msg
+            parameters.extend(waypoint_params_or_msg)
+
+        parameters.append(
             ParameterMsg(
                 name='enabled',
                 value=ParameterValue(type=ParameterType.PARAMETER_BOOL, bool_value=bool(enabled)),
             )
-        ]
+        )
+        req.parameters = parameters
         future = self._set_param_client.call_async(req)
         done = threading.Event()
 
@@ -213,6 +246,105 @@ class RtkHttpBridge(Node):
             return True, 'ok'
         except Exception as exc:
             return False, f'set enabled exception: {exc}'
+
+    def _waypoint_parameters_from_file(self):
+        data, err = self._load_waypoint_yaml()
+        if err:
+            return False, err
+        params = data['gps_waypoint_follower']['ros__parameters']
+        latitudes = [float(value) for value in (params.get('waypoint_latitudes') or [])]
+        longitudes = [float(value) for value in (params.get('waypoint_longitudes') or [])]
+        names = [str(value) for value in (params.get('waypoint_names') or [])]
+
+        if len(latitudes) != len(longitudes):
+            return False, 'waypoint_latitudes and waypoint_longitudes length mismatch'
+        if names and len(names) != len(latitudes):
+            return False, 'waypoint_names length mismatch'
+        if not names:
+            names = [f'wp_{index + 1}' for index in range(len(latitudes))]
+
+        return True, [
+            ParameterMsg(
+                name='waypoint_latitudes',
+                value=ParameterValue(
+                    type=ParameterType.PARAMETER_DOUBLE_ARRAY,
+                    double_array_value=latitudes,
+                ),
+            ),
+            ParameterMsg(
+                name='waypoint_longitudes',
+                value=ParameterValue(
+                    type=ParameterType.PARAMETER_DOUBLE_ARRAY,
+                    double_array_value=longitudes,
+                ),
+            ),
+            ParameterMsg(
+                name='waypoint_names',
+                value=ParameterValue(
+                    type=ParameterType.PARAMETER_STRING_ARRAY,
+                    string_array_value=names,
+                ),
+            ),
+        ]
+
+    def _get_nav_enabled(self):
+        if not self._get_param_client.wait_for_service(timeout_sec=0.2):
+            return None, 'follower get_parameters service unavailable'
+
+        req = GetParameters.Request()
+        req.names = ['enabled']
+        future = self._get_param_client.call_async(req)
+        done = threading.Event()
+        future.add_done_callback(lambda _future: done.set())
+        if not done.wait(timeout=0.5):
+            return None, 'get enabled timeout'
+
+        try:
+            response = future.result()
+            if not response.values:
+                return None, 'enabled parameter missing'
+            value = response.values[0]
+            if value.type != ParameterType.PARAMETER_BOOL:
+                return None, 'enabled parameter is not bool'
+            return bool(value.bool_value), 'ok'
+        except Exception as exc:
+            return None, f'get enabled exception: {exc}'
+
+    @staticmethod
+    def _node_path(info):
+        namespace = info.node_namespace or '/'
+        name = info.node_name or ''
+        if namespace == '/':
+            return f'/{name}'
+        return f'{namespace.rstrip("/")}/{name}'
+
+    def _cmd_vel_publishers(self):
+        infos = self.get_publishers_info_by_topic(self.cmd_vel_topic)
+        return sorted(set(self._node_path(info) for info in infos))
+
+    def _check_control_conflicts(self):
+        publishers = self._cmd_vel_publishers()
+        allowed = {
+            f'/{self.get_name()}',
+            self.follower_node if self.follower_node.startswith('/') else f'/{self.follower_node}',
+        }
+        unknown_publishers = [node for node in publishers if node not in allowed]
+
+        nav_enabled, nav_msg = self._get_nav_enabled()
+        conflicts = []
+        if unknown_publishers:
+            conflicts.append('unexpected /cmd_vel publishers: %s' % ', '.join(unknown_publishers))
+        if nav_enabled is True:
+            conflicts.append('navigation is enabled')
+
+        return {
+            'ok': not conflicts,
+            'conflicts': conflicts,
+            'cmd_vel_topic': self.cmd_vel_topic,
+            'cmd_vel_publishers': publishers,
+            'nav_enabled': nav_enabled,
+            'nav_status': nav_msg,
+        }
 
     def _set_diff_drive_target(self, ip, port=None):
         if not ip or not str(ip).strip():
@@ -319,6 +451,11 @@ class RtkHttpBridge(Node):
         if cmd in ('ping', 'health'):
             return {'ok': True, 'message': 'pong'}
 
+        if cmd in ('check_control_conflicts', 'check_conflicts', 'control_status'):
+            result = self._check_control_conflicts()
+            result['message'] = 'ok' if result['ok'] else '; '.join(result['conflicts'])
+            return result
+
         if cmd in ('enable_nav', 'nav_enable'):
             enabled = bool(payload.get('value', True))
             ok, msg = self._set_nav_enabled(enabled)
@@ -349,6 +486,22 @@ class RtkHttpBridge(Node):
         if cmd in ('cmd_vel', 'teleop'):
             linear_x = float(payload.get('linear_x', 0.0))
             angular_z = float(payload.get('angular_z', 0.0))
+            conflict = self._check_control_conflicts()
+            if not conflict['ok']:
+                self.get_logger().warning(
+                    'Rejecting manual cmd_vel due to control conflict: %s'
+                    % '; '.join(conflict['conflicts']))
+                return {
+                    'ok': False,
+                    'error': 'control_conflict',
+                    'message': '; '.join(conflict['conflicts']),
+                    'linear_x': linear_x,
+                    'angular_z': angular_z,
+                    'conflicts': conflict['conflicts'],
+                    'cmd_vel_publishers': conflict['cmd_vel_publishers'],
+                    'nav_enabled': conflict['nav_enabled'],
+                    'nav_status': conflict['nav_status'],
+                }
             self._publish_cmd_vel(linear_x, angular_z)
             return {'ok': True, 'message': 'cmd_vel published', 'linear_x': linear_x, 'angular_z': angular_z}
 

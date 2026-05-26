@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="680" viewBox="0 0 900 680">
+  <style>
+    .bg { fill: #f8fafc; }
+    .grid { stroke: #dbe3ef; stroke-width: 1; }
+    .axis { stroke: #94a3b8; stroke-width: 2; }
+    .path { fill: none; stroke: #2563eb; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+    .pt { fill: #dc2626; stroke: #ffffff; stroke-width: 3; }
+    .title { font: 22px sans-serif; fill: #0f172a; font-weight: 700; }
+    .subtitle { font: 14px sans-serif; fill: #475569; }
+    .label { font: 14px sans-serif; fill: #0f172a; font-weight: 700; }
+    .coord { font: 11px monospace; fill: #64748b; }
+    .dist { font: 13px sans-serif; fill: #1d4ed8; font-weight: 700; }
+  </style>
+  <rect class="bg" x="0" y="0" width="900" height="680"/>
+  <text class="title" x="28.0" y="38.0">GPS Waypoints Preview</text>
+  <text class="subtitle" x="28.0" y="64.0">origin: wp_1, ENU plane, grid: 2.0m</text>
+  <text class="subtitle" x="28.0" y="90.0">points: 6, path length: 36.81m</text>
+  <g>
+    <line class="grid" x1="294.9" y1="646.4" x2="294.9" y2="25.7"/>
+    <line class="grid" x1="351.4" y1="646.4" x2="351.4" y2="25.7"/>
+    <line class="axis" x1="407.8" y1="646.4" x2="407.8" y2="25.7"/>
+    <line class="grid" x1="464.2" y1="646.4" x2="464.2" y2="25.7"/>
+    <line class="grid" x1="520.7" y1="646.4" x2="520.7" y2="25.7"/>
+    <line class="grid" x1="577.1" y1="646.4" x2="577.1" y2="25.7"/>
+    <line class="grid" x1="294.9" y1="646.4" x2="577.1" y2="646.4"/>
+    <line class="axis" x1="294.9" y1="590.0" x2="577.1" y2="590.0"/>
+    <line class="grid" x1="294.9" y1="533.6" x2="577.1" y2="533.6"/>
+    <line class="grid" x1="294.9" y1="477.1" x2="577.1" y2="477.1"/>
+    <line class="grid" x1="294.9" y1="420.7" x2="577.1" y2="420.7"/>
+    <line class="grid" x1="294.9" y1="364.3" x2="577.1" y2="364.3"/>
+    <line class="grid" x1="294.9" y1="307.9" x2="577.1" y2="307.9"/>
+    <line class="grid" x1="294.9" y1="251.4" x2="577.1" y2="251.4"/>
+    <line class="grid" x1="294.9" y1="195.0" x2="577.1" y2="195.0"/>
+    <line class="grid" x1="294.9" y1="138.6" x2="577.1" y2="138.6"/>
+    <line class="grid" x1="294.9" y1="82.1" x2="577.1" y2="82.1"/>
+    <line class="grid" x1="294.9" y1="25.7" x2="577.1" y2="25.7"/>
+    <polyline class="path" points="407.8,590.0 464.3,356.0 476.9,189.6 476.4,90.0 492.7,510.6 407.3,580.7"/>
+    <circle class="pt" cx="407.8" cy="590.0" r="8"/>
+    <text class="label" x="418.8" y="579.0">wp_1 (0.0m, 0.0m)</text>
+    <text class="coord" x="418.8" y="599.0">31.20143944, 121.57725588</text>
+    <circle class="pt" cx="464.3" cy="356.0" r="8"/>
+    <text class="label" x="475.3" y="345.0">wp_2 (2.0m, 8.3m)</text>
+    <text class="coord" x="475.3" y="365.0">31.20151395, 121.57727692</text>
+    <text class="dist" x="444.1" y="465.0">8.53m</text>
+    <circle class="pt" cx="476.9" cy="189.6" r="8"/>
+    <text class="label" x="487.9" y="178.6">wp_3 (2.5m, 14.2m)</text>
+    <text class="coord" x="487.9" y="198.6">31.20156692, 121.57728162</text>
+    <text class="dist" x="478.6" y="264.8">5.91m</text>
+    <circle class="pt" cx="476.4" cy="90.0" r="8"/>
+    <text class="label" x="487.4" y="79.0">wp_4 (2.4m, 17.7m)</text>
+    <text class="coord" x="487.4" y="99.0">31.20159863, 121.57728144</text>
+    <text class="dist" x="484.7" y="131.8">3.53m</text>
+    <circle class="pt" cx="492.7" cy="510.6" r="8"/>
+    <text class="label" x="503.7" y="499.6">wp_5 (3.0m, 2.8m)</text>
+    <text class="coord" x="503.7" y="519.6">31.20146473, 121.57728750</text>
+    <text class="dist" x="492.6" y="292.3">14.92m</text>
+    <circle class="pt" cx="407.3" cy="580.7" r="8"/>
+    <text class="label" x="418.3" y="569.7">wp_6 (-0.0m, 0.3m)</text>
+    <text class="coord" x="418.3" y="589.7">31.20144240, 121.57725569</text>
+    <text class="dist" x="458.0" y="537.6">3.92m</text>
+  </g>
+</svg>

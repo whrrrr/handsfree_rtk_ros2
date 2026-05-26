@@ -72,7 +72,7 @@ class RTKTagDriver(Node):
     def _handle_line(self, line):
         self.raw_pub.publish(String(data=line))
 
-        if line.startswith(('$GNGGA', '$GPGGA', '$GNRMC', '$GPRMC', '$GNTHS', '$GPTHS')):
+        if line.startswith(('$GNGGA', '$GPGGA', '$GNRMC', '$GPRMC', '$GNTHS', '$GPTHS', '#UNIHEADINGA')):
             self.get_logger().info(line)
 
         parsed = parse_nmea_sentence(line)
@@ -83,7 +83,7 @@ class RTKTagDriver(Node):
             self._publish_gga(parsed)
         elif parsed['type'] == 'GNRMC':
             self._publish_rmc(parsed)
-        elif parsed['type'] == 'GNTHS':
+        elif parsed['type'] in ('GNTHS', 'UNIHEADINGA'):
             self._publish_ths(parsed)
 
     def _publish_gga(self, parsed):
@@ -130,7 +130,7 @@ class RTKTagDriver(Node):
         heading = parsed.get('heading')
         if heading is not None and parsed.get('valid', False):
             self.heading_pub.publish(Float64(data=heading))
-            self.get_logger().info('THS: heading=%.3f' % heading)
+            self.get_logger().info('%s: heading=%.3f' % (parsed.get('type', 'HEADING'), heading))
 
     def _cleanup_serial(self):
         try:

@@ -205,7 +205,7 @@ class NtripGnssNode(Node):
     def _handle_nmea_line(self, line):
         self.rtk_raw_publisher.publish(String(data=line))
 
-        if not line or line[0] != '$':
+        if not line or (line[0] != '$' and not line.startswith('#UNIHEADINGA')):
             return
 
         if line.startswith(('$GPGGA', '$GNGGA')) and verify_nmea_checksum(line):
@@ -223,7 +223,7 @@ class NtripGnssNode(Node):
             self._publish_gngga_data(info)
         elif info.get('type') == 'GNRMC':
             self._publish_gnrmc_data(info)
-        elif info.get('type') == 'GNTHS':
+        elif info.get('type') in ('GNTHS', 'UNIHEADINGA'):
             self._publish_gnths_data(info)
 
     def _publish_gngga_data(self, gga):
@@ -270,7 +270,7 @@ class NtripGnssNode(Node):
         heading = ths.get('heading')
         if heading is not None and ths.get('valid', False):
             self.heading_pub.publish(Float64(data=heading))
-            self.get_logger().info('THS: heading=%.3f' % heading)
+            self.get_logger().info('%s: heading=%.3f' % (ths.get('type', 'HEADING'), heading))
 
     def _close_serial(self):
         try:

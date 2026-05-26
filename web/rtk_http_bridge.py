@@ -22,8 +22,29 @@ except ImportError:
     yaml = None
 
 
+def _parent_dirs(path):
+    current = os.path.abspath(path)
+    while True:
+        yield current
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
+
+
 def _default_waypoint_file():
-    return '/home/wyy/github/src/handsfree_rtk_ros2/gps_waypoint_nav/config/waypoints.yaml'
+    for base_dir in _parent_dirs(os.getcwd()):
+        candidates = (
+            os.path.join(base_dir, 'src', 'gps', 'gps_waypoint_nav', 'config', 'waypoints.yaml'),
+            os.path.join(base_dir, 'gps_waypoint_nav', 'config', 'waypoints.yaml'),
+            os.path.join(base_dir, 'config', 'waypoints.yaml'),
+        )
+        for path in candidates:
+            if os.path.exists(path):
+                return path
+    return os.path.join(
+        os.path.expanduser('~'),
+        'cc_ws', 'tros_ws', 'src', 'gps', 'gps_waypoint_nav', 'config', 'waypoints.yaml')
 
 
 class RtkHttpBridge(Node):
