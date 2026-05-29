@@ -379,10 +379,10 @@ class RtkHttpBridge(Node):
         parsed = {}
         if not text:
             return parsed
-        if text.startswith('tracking '):
+        if text.startswith('tracking ') or text.startswith('path_tracking '):
             parts = text.split()
             if len(parts) >= 3:
-                parsed['mode'] = 'tracking'
+                parsed['mode'] = parts[0]
                 parsed['target'] = parts[1]
                 parsed['progress'] = parts[2].rstrip(':')
         elif text.startswith('arrived '):
@@ -397,6 +397,10 @@ class RtkHttpBridge(Node):
             'v=': ('linear_speed', ''),
             'w=': ('angular_speed', ''),
             'source=': ('source', ''),
+            'cross_track=': ('cross_track_m', 'm'),
+            'path_s=': ('path_progress_m', 'm'),
+            'remaining=': ('remaining_m', 'm'),
+            'lookahead=': ('lookahead_m', 'm'),
         }
         for token in text.replace(':', ' ').split():
             for prefix, (name, suffix) in fields.items():
@@ -520,6 +524,7 @@ class RtkHttpBridge(Node):
             'min_linear_speed',
             'max_angular_speed',
             'heading_kp',
+            'lookahead_distance_m',
             'slow_radius_m',
             'large_heading_error_rad',
         }
@@ -839,8 +844,13 @@ class RtkHttpBridge(Node):
             return {'ok': ok, 'message': msg, 'enabled': enabled}
 
         if cmd in ('start_follow', 'start'):
+            stop_ok, stop_msg = self._set_nav_enabled(False)
             ok, msg = self._set_nav_enabled(True)
-            return {'ok': ok, 'message': msg, 'enabled': True}
+            return {
+                'ok': ok,
+                'message': msg if stop_ok else f'{msg}; pre-stop: {stop_msg}',
+                'enabled': True,
+            }
 
         if cmd in ('set_nav_params', 'set_follow_params', 'set_follow_speed'):
             ok, msg, applied = self._set_nav_params(payload)

@@ -144,7 +144,7 @@
           <div class="row" style="margin-top:8px">
             <span class="pill">红点：航点</span>
             <span class="pill">蓝点：车辆</span>
-            <span class="pill">蓝线：路线</span>
+            <span class="pill">蓝线：巡点路径</span>
             <span class="pill">坐标：以 wp_1 为原点 ENU</span>
           </div>
         </div>
@@ -162,7 +162,7 @@
             <div class="col-6 metric">
               <div class="name">目标距离</div>
               <div id="distanceValue" class="value">--</div>
-              <div class="sub">arrival radius 按 follower 参数</div>
+              <div id="pathErrorValue" class="sub">cross track --</div>
             </div>
             <div class="col-6 metric">
               <div class="name">航向误差</div>
@@ -225,7 +225,11 @@
           <div class="grid">
             <div class="col-6">
               <label>到点半径 arrival_radius_m</label>
-              <input id="navArrivalRadius" type="number" step="0.01" value="0.50">
+              <input id="navArrivalRadius" type="number" step="0.01" value="0.10">
+            </div>
+            <div class="col-6">
+              <label>前视距离 lookahead_distance_m</label>
+              <input id="navLookahead" type="number" step="0.01" value="0.10">
             </div>
             <div class="col-6">
               <label>最大线速度</label>
@@ -233,7 +237,7 @@
             </div>
             <div class="col-6">
               <label>最小线速度</label>
-              <input id="navMinLinear" type="number" step="0.01" value="1.00">
+              <input id="navMinLinear" type="number" step="0.01" value="0.50">
             </div>
             <div class="col-6">
               <label>最大角速度</label>
@@ -241,14 +245,17 @@
             </div>
             <div class="col-6">
               <label>转向 KP</label>
-              <input id="navHeadingKp" type="number" step="0.1" value="10.00">
+              <input id="navHeadingKp" type="number" step="0.1" value="1.20">
             </div>
           </div>
           <div class="row" style="margin-top:10px">
             <button onclick="applyNavParams()">应用巡点参数</button>
-            <button onclick="setNavPreset(0.20,0.25,0.06,0.60,1.2)" class="secondary">慢</button>
-            <button onclick="setNavPreset(0.30,0.45,0.10,0.90,1.4)" class="secondary">中</button>
-            <button onclick="setNavPreset(0.50,0.70,0.12,1.20,1.6)" class="secondary">快</button>
+            <button onclick="saveNavDefaults()" class="secondary">保存为默认</button>
+            <button onclick="resetNavDefaults()" class="secondary">恢复内置默认</button>
+            <button onclick="setNavPreset(0.10,0.10,5.00,0.50,4.00,1.2)" class="secondary">当前</button>
+            <button onclick="setNavPreset(0.20,0.70,1.10,1.00,1.00,1.2)" class="secondary">慢</button>
+            <button onclick="setNavPreset(0.30,0.90,1.50,1.00,1.50,1.5)" class="secondary">中</button>
+            <button onclick="setNavPreset(0.50,1.20,2.00,1.00,2.00,1.8)" class="secondary">快</button>
           </div>
         </div>
       </div>
@@ -350,6 +357,15 @@
     let latestState = null;
     let holdTimer = null;
     let holding = false;
+    const navDefaultKey = 'rtk_http_remote.nav_defaults.v1';
+    const builtinNavDefaults = {
+      arrivalRadius: 0.10,
+      lookahead: 0.10,
+      maxLinear: 5.00,
+      minLinear: 0.50,
+      maxAngular: 4.00,
+      headingKp: 1.20
+    };
 
     function baseUrl() {
       return document.getElementById('baseUrl').value.trim().replace(/\/+$/, '');
@@ -437,22 +453,58 @@
         port: Number(document.getElementById('controlPort').value || 8888)
       });
     }
-    function setNavPreset(arrivalRadius, maxLinear, minLinear, maxAngular, headingKp) {
+    function setNavPreset(arrivalRadius, lookahead, maxLinear, minLinear, maxAngular, headingKp) {
       document.getElementById('navArrivalRadius').value = arrivalRadius.toFixed(2);
+      document.getElementById('navLookahead').value = lookahead.toFixed(2);
       document.getElementById('navMaxLinear').value = maxLinear.toFixed(2);
       document.getElementById('navMinLinear').value = minLinear.toFixed(2);
       document.getElementById('navMaxAngular').value = maxAngular.toFixed(2);
       document.getElementById('navHeadingKp').value = headingKp.toFixed(2);
       applyNavParams();
     }
+    function currentNavDefaults() {
+      return {
+        arrivalRadius: readNumber('navArrivalRadius', builtinNavDefaults.arrivalRadius),
+        lookahead: readNumber('navLookahead', builtinNavDefaults.lookahead),
+        maxLinear: readNumber('navMaxLinear', builtinNavDefaults.maxLinear),
+        minLinear: readNumber('navMinLinear', builtinNavDefaults.minLinear),
+        maxAngular: readNumber('navMaxAngular', builtinNavDefaults.maxAngular),
+        headingKp: readNumber('navHeadingKp', builtinNavDefaults.headingKp)
+      };
+    }
+    function loadNavDefaults() {
+      let defaults = builtinNavDefaults;
+      try {
+        const saved = JSON.parse(localStorage.getItem(navDefaultKey) || 'null');
+        if (saved && typeof saved === 'object') defaults = { ...builtinNavDefaults, ...saved };
+      } catch (err) {
+        defaults = builtinNavDefaults;
+      }
+      document.getElementById('navArrivalRadius').value = Number(defaults.arrivalRadius).toFixed(2);
+      document.getElementById('navLookahead').value = Number(defaults.lookahead).toFixed(2);
+      document.getElementById('navMaxLinear').value = Number(defaults.maxLinear).toFixed(2);
+      document.getElementById('navMinLinear').value = Number(defaults.minLinear).toFixed(2);
+      document.getElementById('navMaxAngular').value = Number(defaults.maxAngular).toFixed(2);
+      document.getElementById('navHeadingKp').value = Number(defaults.headingKp).toFixed(2);
+    }
+    function saveNavDefaults() {
+      localStorage.setItem(navDefaultKey, JSON.stringify(currentNavDefaults()));
+      logLine('已保存当前巡点参数为网页默认值', 'ok');
+    }
+    function resetNavDefaults() {
+      localStorage.removeItem(navDefaultKey);
+      loadNavDefaults();
+      logLine('已恢复内置巡点默认值', 'ok');
+    }
     function applyNavParams() {
       sendJson({
         cmd: 'set_nav_params',
-        arrival_radius_m: readNumber('navArrivalRadius', 0.5),
-        max_linear_speed: readNumber('navMaxLinear', 5.0),
-        min_linear_speed: readNumber('navMinLinear', 1.0),
-        max_angular_speed: readNumber('navMaxAngular', 4.0),
-        heading_kp: readNumber('navHeadingKp', 10.0)
+        arrival_radius_m: readNumber('navArrivalRadius', builtinNavDefaults.arrivalRadius),
+        lookahead_distance_m: readNumber('navLookahead', builtinNavDefaults.lookahead),
+        max_linear_speed: readNumber('navMaxLinear', builtinNavDefaults.maxLinear),
+        min_linear_speed: readNumber('navMinLinear', builtinNavDefaults.minLinear),
+        max_angular_speed: readNumber('navMaxAngular', builtinNavDefaults.maxAngular),
+        heading_kp: readNumber('navHeadingKp', builtinNavDefaults.headingKp)
       });
     }
     function selectedWaypointIndex() {
@@ -532,11 +584,14 @@
       else setPill('rtkState', 'RTK 数据过期', 'bad');
 
       const mode = parsed.mode || status.text || '--';
-      setPill('navState', mode === 'tracking' ? '导航中' : mode, mode === 'tracking' ? 'ok' : 'warn');
+      const tracking = mode === 'tracking' || mode === 'path_tracking';
+      setPill('navState', tracking ? '导航中' : mode, tracking ? 'ok' : 'warn');
 
       document.getElementById('targetValue').textContent = parsed.target || '--';
       document.getElementById('progressValue').textContent = parsed.progress || status.text || '--';
       document.getElementById('distanceValue').textContent = fmt(parsed.distance_m, 2, 'm');
+      document.getElementById('pathErrorValue').textContent =
+        `cross ${fmt(parsed.cross_track_m, 2, 'm')} / remain ${fmt(parsed.remaining_m, 2, 'm')}`;
       document.getElementById('headingErrorValue').textContent = fmt(parsed.heading_error_deg, 1, '°');
       document.getElementById('headingErrorValue').className =
         `value ${Math.abs(parsed.heading_error_deg || 0) < 15 ? 'ok' : Math.abs(parsed.heading_error_deg || 0) < 60 ? 'warn' : 'bad'}`;
@@ -686,6 +741,7 @@
     window.addEventListener('mouseup', stopHold);
     window.addEventListener('blur', stopHold);
     window.addEventListener('resize', () => latestState && drawMap(latestState));
+    loadNavDefaults();
     testHttp();
     refreshState();
     setInterval(refreshState, 500);

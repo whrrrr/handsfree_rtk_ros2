@@ -22,6 +22,13 @@ def latlon_to_enu(lat, lon, origin_lat, origin_lon):
     return x, y
 
 
+def enu_to_latlon(x, y, origin_lat, origin_lon):
+    origin_lat_rad = math.radians(origin_lat)
+    lat_rad = origin_lat_rad + y / EARTH_RADIUS_M
+    lon_rad = math.radians(origin_lon) + x / (EARTH_RADIUS_M * math.cos(origin_lat_rad))
+    return math.degrees(lat_rad), math.degrees(lon_rad)
+
+
 def enu_distance_and_bearing(current_xy, target_xy):
     dx = target_xy[0] - current_xy[0]
     dy = target_xy[1] - current_xy[1]
