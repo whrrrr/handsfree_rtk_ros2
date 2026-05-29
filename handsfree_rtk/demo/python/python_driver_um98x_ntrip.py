@@ -7,8 +7,8 @@ Linux 使用方式：
 python python_driver_um98x_ntrip.py \
   --port /dev/ttyUSB0 \
   --baudrate 115200 \
-  --server 120.253.239.161 --server-port 8002 \
-  --username ctea952 --password cm286070 --mount RTCM33_GRCE \
+  --server YOUR_NTRIP_SERVER --server-port 8002 \
+  --username YOUR_NTRIP_USERNAME --password YOUR_NTRIP_PASSWORD --mount YOUR_NTRIP_MOUNTPOINT \
   --print-raw
  Windows 使用方式：
  将 Linux 使用方式中的--port 的值改为COMX，具体是COM几，需要用户自行查看
@@ -518,11 +518,11 @@ def main():
     parser.add_argument("--port", default="/dev/ttyUSB0", help="Serial port (default: /dev/HFRobotRTK)")
     parser.add_argument("--baudrate", type=int, default=115200, help="Serial baudrate (default: 115200)")
     parser.add_argument("--serial-timeout", type=float, default=1.0, help="Serial timeout seconds (default: 1.0)")
-    parser.add_argument("--server", default="120.253.239.161", help="NTRIP caster host")
+    parser.add_argument("--server", default="YOUR_NTRIP_SERVER", help="NTRIP caster host")
     parser.add_argument("--server-port", type=int, default=8002, help="NTRIP caster port")
-    parser.add_argument("--username", default="ctea952", help="NTRIP username")
-    parser.add_argument("--password", default="cm286070", help="NTRIP password")
-    parser.add_argument("--mount", default="RTCM33_GRCE", help="NTRIP mountpoint")
+    parser.add_argument("--username", default="YOUR_NTRIP_USERNAME", help="NTRIP username")
+    parser.add_argument("--password", default="YOUR_NTRIP_PASSWORD", help="NTRIP password")
+    parser.add_argument("--mount", default="YOUR_NTRIP_MOUNTPOINT", help="NTRIP mountpoint")
     parser.add_argument("--gga-period", type=float, default=3.0, help="Seconds between GGA uploads (default: 3.0)")
     parser.add_argument("--print-raw", action="store_true", help="Print raw NMEA lines")
     parser.add_argument("--no-color", action="store_true", help="Disable ANSI colors in output")

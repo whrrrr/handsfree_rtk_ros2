@@ -34,10 +34,10 @@ class WaypointFollower(Node):
         self.declare_parameter('waypoint_longitudes', Parameter.Type.DOUBLE_ARRAY)
         self.declare_parameter('waypoint_names', Parameter.Type.STRING_ARRAY)
         self.declare_parameter('arrival_radius_m', 0.5)
-        self.declare_parameter('max_linear_speed', 0.35)
-        self.declare_parameter('min_linear_speed', 0.06)
-        self.declare_parameter('max_angular_speed', 0.8)
-        self.declare_parameter('heading_kp', 1.4)
+        self.declare_parameter('max_linear_speed', 5.0)
+        self.declare_parameter('min_linear_speed', 1.0)
+        self.declare_parameter('max_angular_speed', 4.0)
+        self.declare_parameter('heading_kp', 10.0)
         self.declare_parameter('slow_radius_m', 2.0)
         self.declare_parameter('large_heading_error_rad', 1.2)
         self.declare_parameter('control_rate_hz', 10.0)
@@ -271,7 +271,7 @@ class WaypointFollower(Node):
         heading_error = wrap_angle(target_bearing - heading)
         linear = self._linear_speed(distance, abs(heading_error))
         angular = max(-self.max_angular_speed,
-                      min(self.max_angular_speed, self.heading_kp * heading_error))
+                      min(self.max_angular_speed, -self.heading_kp * heading_error))
 
         cmd = Twist()
         cmd.linear.x = linear

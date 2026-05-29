@@ -11,16 +11,22 @@ def generate_launch_description():
     max_wheel_speed_mps = LaunchConfiguration('max_wheel_speed_mps')
     min_effective_speed_mps = LaunchConfiguration('min_effective_speed_mps')
     invert_linear = LaunchConfiguration('invert_linear')
+    invert_left = LaunchConfiguration('invert_left')
+    invert_right = LaunchConfiguration('invert_right')
+    swap_wheels = LaunchConfiguration('swap_wheels')
     http_host = LaunchConfiguration('http_host')
     http_port = LaunchConfiguration('http_port')
 
     return LaunchDescription([
-        DeclareLaunchArgument('esp32_ip', default_value='192.168.153.239'),
+        DeclareLaunchArgument('esp32_ip', default_value='192.168.162.239'),
         DeclareLaunchArgument('esp32_port', default_value='8888'),
         DeclareLaunchArgument('wheel_base_m', default_value='0.355'),
         DeclareLaunchArgument('max_wheel_speed_mps', default_value='0.0'),
         DeclareLaunchArgument('min_effective_speed_mps', default_value='0.12'),
         DeclareLaunchArgument('invert_linear', default_value='true'),
+        DeclareLaunchArgument('invert_left', default_value='false'),
+        DeclareLaunchArgument('invert_right', default_value='false'),
+        DeclareLaunchArgument('swap_wheels', default_value='true'),
         DeclareLaunchArgument('http_host', default_value='0.0.0.0'),
         DeclareLaunchArgument('http_port', default_value='8080'),
         Node(
@@ -35,6 +41,9 @@ def generate_launch_description():
                 'max_wheel_speed_mps': max_wheel_speed_mps,
                 'min_effective_speed_mps': min_effective_speed_mps,
                 'invert_linear': invert_linear,
+                'invert_left': invert_left,
+                'invert_right': invert_right,
+                'swap_wheels': swap_wheels,
             }],
         ),
         Node(
