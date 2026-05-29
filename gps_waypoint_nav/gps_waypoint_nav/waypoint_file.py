@@ -42,6 +42,7 @@ def load_waypoint_config(path):
                     'enabled': False,
                     'gnss_topic': 'handsfree/rtk/gnss',
                     'cog_topic': 'handsfree/rtk/cog',
+                    'heading_topic': 'handsfree/rtk/heading',
                     'cmd_vel_topic': '/cmd_vel',
                     'waypoint_latitudes': [],
                     'waypoint_longitudes': [],
@@ -54,6 +55,7 @@ def load_waypoint_config(path):
     data.setdefault(NODE_NAME, {})
     data[NODE_NAME].setdefault('ros__parameters', {})
     params = data[NODE_NAME]['ros__parameters']
+    params.setdefault('heading_topic', 'handsfree/rtk/heading')
     params.setdefault('waypoint_latitudes', [])
     params.setdefault('waypoint_longitudes', [])
     params.setdefault('waypoint_names', [])

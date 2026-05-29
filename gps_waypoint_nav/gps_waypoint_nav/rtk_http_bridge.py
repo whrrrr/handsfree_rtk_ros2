@@ -16,6 +16,7 @@ from rcl_interfaces.srv import GetParameters
 from rcl_interfaces.srv import SetParameters
 from rclpy.node import Node
 from sensor_msgs.msg import NavSatFix, NavSatStatus
+from std_msgs.msg import Float64, String
 
 try:
     import yaml
@@ -56,6 +57,9 @@ class RtkHttpBridge(Node):
         self.declare_parameter('port', 8080)
         self.declare_parameter('api_path', '/api/command')
         self.declare_parameter('gnss_topic', 'handsfree/rtk/gnss')
+        self.declare_parameter('heading_topic', 'handsfree/rtk/heading')
+        self.declare_parameter('cog_topic', 'handsfree/rtk/cog')
+        self.declare_parameter('status_topic', '/gps_waypoint_follower/status')
         self.declare_parameter('cmd_vel_topic', '/cmd_vel')
         self.declare_parameter('follower_node', '/gps_waypoint_follower')
         self.declare_parameter('diff_drive_node', '/diff_drive_udp')
@@ -73,6 +77,14 @@ class RtkHttpBridge(Node):
 
         self.latest_fix = None
         self.latest_fix_ts = 0.0
+        self.latest_heading = None
+        self.latest_heading_ts = 0.0
+        self.latest_cog = None
+        self.latest_cog_ts = 0.0
+        self.latest_status = ''
+        self.latest_status_ts = 0.0
+        self.latest_cmd_vel = {'linear_x': 0.0, 'angular_z': 0.0}
+        self.latest_cmd_vel_ts = 0.0
         self._httpd = None
         self._http_thread = None
         self._lock = threading.Lock()
@@ -83,6 +95,25 @@ class RtkHttpBridge(Node):
             self._on_fix,
             20,
         )
+        self.create_subscription(
+            Float64,
+            str(self.get_parameter('heading_topic').value),
+            self._on_heading,
+            20,
+        )
+        self.create_subscription(
+            Float64,
+            str(self.get_parameter('cog_topic').value),
+            self._on_cog,
+            20,
+        )
+        self.create_subscription(
+            String,
+            str(self.get_parameter('status_topic').value),
+            self._on_status,
+            20,
+        )
+        self.create_subscription(Twist, self.cmd_vel_topic, self._on_cmd_vel, 20)
         self.cmd_pub = self.create_publisher(Twist, self.cmd_vel_topic, 10)
         self._get_param_client = self.create_client(
             GetParameters, f'{self.follower_node.rstrip("/")}/get_parameters')
@@ -97,6 +128,29 @@ class RtkHttpBridge(Node):
         with self._lock:
             self.latest_fix = msg
             self.latest_fix_ts = time.time()
+
+    def _on_heading(self, msg: Float64):
+        with self._lock:
+            self.latest_heading = float(msg.data)
+            self.latest_heading_ts = time.time()
+
+    def _on_cog(self, msg: Float64):
+        with self._lock:
+            self.latest_cog = float(msg.data)
+            self.latest_cog_ts = time.time()
+
+    def _on_status(self, msg: String):
+        with self._lock:
+            self.latest_status = str(msg.data)
+            self.latest_status_ts = time.time()
+
+    def _on_cmd_vel(self, msg: Twist):
+        with self._lock:
+            self.latest_cmd_vel = {
+                'linear_x': float(msg.linear.x),
+                'angular_z': float(msg.angular.z),
+            }
+            self.latest_cmd_vel_ts = time.time()
 
     def _start_http_server(self):
         bridge = self
@@ -127,6 +181,9 @@ class RtkHttpBridge(Node):
                 parsed = urlparse(self.path)
                 if parsed.path == '/healthz':
                     self._send_json(200, {'ok': True, 'node': bridge.get_name()})
+                    return
+                if parsed.path == '/api/state':
+                    self._send_json(200, bridge.snapshot_state())
                     return
                 if parsed.path != bridge.api_path:
                     self._send_json(404, {'ok': False, 'error': 'not_found'})
@@ -182,6 +239,7 @@ class RtkHttpBridge(Node):
                     'enabled': False,
                     'gnss_topic': 'handsfree/rtk/gnss',
                     'cog_topic': 'handsfree/rtk/cog',
+                    'heading_topic': 'handsfree/rtk/heading',
                     'cmd_vel_topic': '/cmd_vel',
                     'waypoint_latitudes': waypoint_latitudes,
                     'waypoint_longitudes': waypoint_longitudes,
@@ -206,6 +264,155 @@ class RtkHttpBridge(Node):
         data.setdefault('gps_waypoint_follower', {})
         data['gps_waypoint_follower'].setdefault('ros__parameters', {})
         return data, None
+
+    def snapshot_state(self):
+        now = time.time()
+        with self._lock:
+            fix = self.latest_fix
+            fix_ts = self.latest_fix_ts
+            heading = self.latest_heading
+            heading_ts = self.latest_heading_ts
+            cog = self.latest_cog
+            cog_ts = self.latest_cog_ts
+            status = self.latest_status
+            status_ts = self.latest_status_ts
+            cmd_vel = dict(self.latest_cmd_vel)
+            cmd_vel_ts = self.latest_cmd_vel_ts
+
+        waypoints = self._waypoint_snapshot()
+        state = {
+            'ok': True,
+            'time': now,
+            'gnss': None,
+            'heading': {
+                'value': heading,
+                'age_sec': None if heading_ts <= 0 else now - heading_ts,
+            },
+            'cog': {
+                'value': cog,
+                'age_sec': None if cog_ts <= 0 else now - cog_ts,
+            },
+            'status': {
+                'text': status,
+                'age_sec': None if status_ts <= 0 else now - status_ts,
+                'parsed': self._parse_status(status),
+            },
+            'cmd_vel': {
+                **cmd_vel,
+                'age_sec': None if cmd_vel_ts <= 0 else now - cmd_vel_ts,
+            },
+            'waypoints': waypoints,
+        }
+
+        if fix is not None:
+            state['gnss'] = {
+                'latitude': float(fix.latitude),
+                'longitude': float(fix.longitude),
+                'altitude': float(fix.altitude),
+                'status': int(fix.status.status),
+                'service': int(fix.status.service),
+                'age_sec': None if fix_ts <= 0 else now - fix_ts,
+            }
+            self._add_vehicle_xy(state)
+        return state
+
+    def _waypoint_snapshot(self):
+        data, err = self._load_waypoint_yaml()
+        if err:
+            return {'ok': False, 'error': err, 'items': []}
+        params = data['gps_waypoint_follower']['ros__parameters']
+        latitudes = [float(value) for value in (params.get('waypoint_latitudes') or [])]
+        longitudes = [float(value) for value in (params.get('waypoint_longitudes') or [])]
+        names = [str(value) for value in (params.get('waypoint_names') or [])]
+        items = []
+        for index, (lat, lon) in enumerate(zip(latitudes, longitudes)):
+            items.append({
+                'name': names[index] if index < len(names) else f'wp_{index + 1}',
+                'latitude': lat,
+                'longitude': lon,
+            })
+        if items:
+            origin_lat = items[0]['latitude']
+            origin_lon = items[0]['longitude']
+            for item in items:
+                x, y = self._latlon_to_enu(
+                    item['latitude'], item['longitude'], origin_lat, origin_lon)
+                item['x'] = x
+                item['y'] = y
+        return {'ok': True, 'items': items}
+
+    def _add_vehicle_xy(self, state):
+        items = state['waypoints']['items']
+        if not items:
+            return
+        x, y = self._latlon_to_enu(
+            state['gnss']['latitude'],
+            state['gnss']['longitude'],
+            items[0]['latitude'],
+            items[0]['longitude'],
+        )
+        state['gnss']['x'] = x
+        state['gnss']['y'] = y
+
+    @staticmethod
+    def _latlon_to_enu(lat, lon, origin_lat, origin_lon):
+        radius_m = 6378137.0
+        lat_rad = math.radians(lat)
+        lon_rad = math.radians(lon)
+        origin_lat_rad = math.radians(origin_lat)
+        origin_lon_rad = math.radians(origin_lon)
+        x = radius_m * (lon_rad - origin_lon_rad) * math.cos((lat_rad + origin_lat_rad) / 2.0)
+        y = radius_m * (lat_rad - origin_lat_rad)
+        return x, y
+
+    @staticmethod
+    def _enu_to_latlon(x, y, origin_lat, origin_lon):
+        radius_m = 6378137.0
+        origin_lat_rad = math.radians(origin_lat)
+        lat_rad = origin_lat_rad + y / radius_m
+        lon_rad = math.radians(origin_lon) + x / (
+            radius_m * math.cos((lat_rad + origin_lat_rad) / 2.0))
+        return math.degrees(lat_rad), math.degrees(lon_rad)
+
+    @staticmethod
+    def _parse_status(text):
+        parsed = {}
+        if not text:
+            return parsed
+        if text.startswith('tracking ') or text.startswith('path_tracking '):
+            parts = text.split()
+            if len(parts) >= 3:
+                parsed['mode'] = parts[0]
+                parsed['target'] = parts[1]
+                parsed['progress'] = parts[2].rstrip(':')
+        elif text.startswith('arrived '):
+            parsed['mode'] = 'arrived'
+            parsed['target'] = text.split(maxsplit=1)[1]
+        else:
+            parsed['mode'] = text
+
+        fields = {
+            'distance=': ('distance_m', 'm'),
+            'heading_error=': ('heading_error_deg', 'deg'),
+            'v=': ('linear_speed', ''),
+            'w=': ('angular_speed', ''),
+            'source=': ('source', ''),
+            'cross_track=': ('cross_track_m', 'm'),
+            'path_s=': ('path_progress_m', 'm'),
+            'remaining=': ('remaining_m', 'm'),
+            'lookahead=': ('lookahead_m', 'm'),
+        }
+        for token in text.replace(':', ' ').split():
+            for prefix, (name, suffix) in fields.items():
+                if token.startswith(prefix):
+                    value = token[len(prefix):]
+                    if suffix and value.endswith(suffix):
+                        value = value[:-len(suffix)]
+                    try:
+                        parsed[name] = float(value)
+                    except ValueError:
+                        parsed[name] = value
+        return parsed
 
     def _set_nav_enabled(self, enabled):
         if not self._set_param_client.wait_for_service(timeout_sec=1.0):
@@ -309,6 +516,59 @@ class RtkHttpBridge(Node):
             return bool(value.bool_value), 'ok'
         except Exception as exc:
             return None, f'get enabled exception: {exc}'
+
+    def _set_nav_params(self, params):
+        allowed = {
+            'arrival_radius_m',
+            'max_linear_speed',
+            'min_linear_speed',
+            'max_angular_speed',
+            'heading_kp',
+            'lookahead_distance_m',
+            'slow_radius_m',
+            'large_heading_error_rad',
+        }
+        parameters = []
+        applied = {}
+        for name in allowed:
+            if name not in params:
+                continue
+            value = float(params[name])
+            if not math.isfinite(value):
+                return False, f'invalid {name}', applied
+            if name != 'heading_kp' and value < 0.0:
+                return False, f'{name} must be >= 0', applied
+            parameters.append(
+                ParameterMsg(
+                    name=name,
+                    value=ParameterValue(type=ParameterType.PARAMETER_DOUBLE, double_value=value),
+                )
+            )
+            applied[name] = value
+
+        if not parameters:
+            return False, 'no supported nav params provided', applied
+        if not self._set_param_client.wait_for_service(timeout_sec=1.0):
+            return False, 'set_parameters service unavailable', applied
+
+        req = SetParameters.Request()
+        req.parameters = parameters
+        future = self._set_param_client.call_async(req)
+        done = threading.Event()
+        future.add_done_callback(lambda _future: done.set())
+        if not done.wait(timeout=2.0):
+            return False, 'set nav params timeout', applied
+
+        try:
+            response = future.result()
+            if not response.results:
+                return False, 'empty set_parameters response', applied
+            for result in response.results:
+                if not result.successful:
+                    return False, f'set nav params failed: {result.reason or "rejected"}', applied
+            return True, 'nav params updated', applied
+        except Exception as exc:
+            return False, f'set nav params exception: {exc}', applied
 
     @staticmethod
     def _node_path(info):
@@ -440,6 +700,128 @@ class RtkHttpBridge(Node):
             return False, msg
         return True, 'cleared waypoints'
 
+    def _sync_waypoints_to_follower(self):
+        if not self._set_param_client.wait_for_service(timeout_sec=0.2):
+            return False, 'follower set_parameters service unavailable'
+        ok, params_or_msg = self._waypoint_parameters_from_file()
+        if not ok:
+            return False, params_or_msg
+        req = SetParameters.Request()
+        req.parameters = params_or_msg
+        future = self._set_param_client.call_async(req)
+        done = threading.Event()
+        future.add_done_callback(lambda _future: done.set())
+        if not done.wait(timeout=1.0):
+            return False, 'sync waypoints timeout'
+        try:
+            response = future.result()
+            failed = [r.reason or 'rejected' for r in response.results if not r.successful]
+            if failed:
+                return False, '; '.join(failed)
+            return True, 'synced to follower'
+        except Exception as exc:
+            return False, f'sync waypoints exception: {exc}'
+
+    def _load_waypoint_lists(self):
+        data, err = self._load_waypoint_yaml()
+        if err:
+            return None, None, None, err
+        params = data['gps_waypoint_follower']['ros__parameters']
+        latitudes = [float(value) for value in (params.get('waypoint_latitudes') or [])]
+        longitudes = [float(value) for value in (params.get('waypoint_longitudes') or [])]
+        names = [str(value) for value in (params.get('waypoint_names') or [])]
+        if len(latitudes) != len(longitudes):
+            return None, None, None, 'waypoint_latitudes and waypoint_longitudes length mismatch'
+        if names and len(names) != len(latitudes):
+            return None, None, None, 'waypoint_names length mismatch'
+        if not names:
+            names = [f'wp_{index + 1}' for index in range(len(latitudes))]
+        return latitudes, longitudes, names, None
+
+    def _waypoint_index_from_payload(self, payload, names, count):
+        if 'index' in payload:
+            index = int(payload.get('index'))
+        elif 'number' in payload:
+            index = int(payload.get('number')) - 1
+        else:
+            name = str(payload.get('name', '')).strip()
+            if not name:
+                return None, 'missing waypoint index/name'
+            try:
+                index = names.index(name)
+            except ValueError:
+                return None, f'waypoint not found: {name}'
+        if index < 0 or index >= count:
+            return None, f'waypoint index out of range: {index}'
+        return index, None
+
+    def _nudge_waypoint(self, payload):
+        latitudes, longitudes, names, err = self._load_waypoint_lists()
+        if err:
+            return False, err, {}
+        if not latitudes:
+            return False, 'no waypoints configured', {}
+        index, err = self._waypoint_index_from_payload(payload, names, len(latitudes))
+        if err:
+            return False, err, {}
+
+        dx = float(payload.get('dx_m', payload.get('east_m', 0.0)))
+        dy = float(payload.get('dy_m', payload.get('north_m', 0.0)))
+        origin_lat = latitudes[0]
+        origin_lon = longitudes[0]
+        x, y = self._latlon_to_enu(latitudes[index], longitudes[index], origin_lat, origin_lon)
+        new_lat, new_lon = self._enu_to_latlon(x + dx, y + dy, origin_lat, origin_lon)
+        latitudes[index] = new_lat
+        longitudes[index] = new_lon
+
+        ok, msg = self._write_waypoint_yaml(latitudes, longitudes, names)
+        if not ok:
+            return False, msg, {}
+        synced, sync_msg = self._sync_waypoints_to_follower()
+        detail = {
+            'index': index,
+            'name': names[index],
+            'latitude': new_lat,
+            'longitude': new_lon,
+            'dx_m': dx,
+            'dy_m': dy,
+            'synced': synced,
+            'sync_message': sync_msg,
+        }
+        return True, (
+            f'nudged {names[index]} by east={dx:.2f}m north={dy:.2f}m'
+            + ('' if synced else f' ({sync_msg})')
+        ), detail
+
+    def _delete_waypoint(self, payload):
+        latitudes, longitudes, names, err = self._load_waypoint_lists()
+        if err:
+            return False, err, {}
+        if not latitudes:
+            return False, 'no waypoints configured', {}
+        index, err = self._waypoint_index_from_payload(payload, names, len(latitudes))
+        if err:
+            return False, err, {}
+        removed = {
+            'index': index,
+            'name': names[index],
+            'latitude': latitudes[index],
+            'longitude': longitudes[index],
+        }
+        del latitudes[index]
+        del longitudes[index]
+        del names[index]
+        ok, msg = self._write_waypoint_yaml(latitudes, longitudes, names)
+        if not ok:
+            return False, msg, {}
+        synced, sync_msg = self._sync_waypoints_to_follower()
+        removed['synced'] = synced
+        removed['sync_message'] = sync_msg
+        return True, (
+            f'deleted {removed["name"]}'
+            + ('' if synced else f' ({sync_msg})')
+        ), removed
+
     def handle_command(self, payload):
         if isinstance(payload, str):
             payload = {'cmd': payload}
@@ -462,8 +844,17 @@ class RtkHttpBridge(Node):
             return {'ok': ok, 'message': msg, 'enabled': enabled}
 
         if cmd in ('start_follow', 'start'):
+            stop_ok, stop_msg = self._set_nav_enabled(False)
             ok, msg = self._set_nav_enabled(True)
-            return {'ok': ok, 'message': msg, 'enabled': True}
+            return {
+                'ok': ok,
+                'message': msg if stop_ok else f'{msg}; pre-stop: {stop_msg}',
+                'enabled': True,
+            }
+
+        if cmd in ('set_nav_params', 'set_follow_params', 'set_follow_speed'):
+            ok, msg, applied = self._set_nav_params(payload)
+            return {'ok': ok, 'message': msg, 'params': applied}
 
         if cmd in ('stop_follow', 'disable_nav'):
             ok, msg = self._set_nav_enabled(False)
@@ -482,6 +873,14 @@ class RtkHttpBridge(Node):
         if cmd in ('clear_waypoints', 'clear'):
             ok, msg = self._clear_waypoints()
             return {'ok': ok, 'message': msg}
+
+        if cmd in ('nudge_waypoint', 'move_waypoint', 'adjust_waypoint'):
+            ok, msg, detail = self._nudge_waypoint(payload)
+            return {'ok': ok, 'message': msg, 'waypoint': detail}
+
+        if cmd in ('delete_waypoint', 'remove_waypoint'):
+            ok, msg, detail = self._delete_waypoint(payload)
+            return {'ok': ok, 'message': msg, 'waypoint': detail}
 
         if cmd in ('cmd_vel', 'teleop'):
             linear_x = float(payload.get('linear_x', 0.0))

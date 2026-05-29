@@ -79,11 +79,11 @@ NTRIP client driver to realize differential data transmission between base stati
 - **Key Parameters**:  
     ```xml
         <!-- NTRIP Server Configuration -->
-        <arg name="ntrip_server" default="120.253.239.161"/>
+        <arg name="ntrip_server" default="YOUR_NTRIP_SERVER"/>
         <arg name="ntrip_port" default="8002"/>
-        <arg name="ntrip_username" default="ctea952"/>
-        <arg name="ntrip_password" default="cm286070"/>
-        <arg name="ntrip_mountpoint" default="RTCM33_GRCE"/>
+        <arg name="ntrip_username" default="YOUR_NTRIP_USERNAME"/>
+        <arg name="ntrip_password" default="YOUR_NTRIP_PASSWORD"/>
+        <arg name="ntrip_mountpoint" default="YOUR_NTRIP_MOUNTPOINT"/>
     ```
 
 ### 2.3 NTRIP CORS Account Configuration  
@@ -92,11 +92,11 @@ These parameters are used to configure the NTRIP client in the RTK differential 
 
 | The name of the parameter | Example values | illustrate |
 | --- | --- | --- |
-| ntrip_server | 120.253.239.161 | The IP address or domain name of the NTRIP server, pointing to the CORS central server that provides the differential correction data |
+| ntrip_server | YOUR_NTRIP_SERVER | The IP address or domain name of the NTRIP server, pointing to the CORS central server that provides the differential correction data |
 | ntrip_port | 8002 | TCP port number used by NTRIP (common port: 2101/8001/8002) |
-| ntrip_username | ctea952 | Authentication username (provided by the CORS service provider to identify the user and perform billing) |
-| ntrip_password | cm286070 | Authentication password (paired with username for service access authentication) |
-| ntrip_mountpoint | RTCM33_GRCE | Mount point name (specifies which type/region of differential data stream to get) |
+| ntrip_username | YOUR_NTRIP_USERNAME | Authentication username (provided by the CORS service provider to identify the user and perform billing) |
+| ntrip_password | YOUR_NTRIP_PASSWORD | Authentication password (paired with username for service access authentication) |
+| ntrip_mountpoint | YOUR_NTRIP_MOUNTPOINT | Mount point name (specifies which type/region of differential data stream to get) |
 
 ---
 

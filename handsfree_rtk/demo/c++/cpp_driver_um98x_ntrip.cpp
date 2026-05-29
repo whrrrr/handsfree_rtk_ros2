@@ -6,14 +6,14 @@
 //   g++ -std=gnu++11 -O2 cpp_driver_um98x_ntrip.cpp -o cpp_driver_um98x_ntrip.exe -lboost_system -lws2_32 -lmswsock
 //  Linux 运行方法：
 // ./cpp_driver_um98x_ntrip --port /dev/ttyUSB0 --baudrate 115200 \
-//   --server 120.253.239.161 --server-port 8002 \
-//   --username ctea952 --password cm286070 \
-//   --mount RTCM33_GRCE --print-raw
+//   --server YOUR_NTRIP_SERVER --server-port 8002 \
+//   --username YOUR_NTRIP_USERNAME --password YOUR_NTRIP_PASSWORD \
+//   --mount YOUR_NTRIP_MOUNTPOINT --print-raw
 //  Windows 运行方法：
 // ./cpp_driver_um98x_ntrip --port COM3 --baudrate 115200 \
-//   --server 120.253.239.161 --server-port 8002 \
-//   --username ctea952 --password cm286070 \
-//   --mount RTCM33_GRCE --print-raw
+//   --server YOUR_NTRIP_SERVER --server-port 8002 \
+//   --username YOUR_NTRIP_USERNAME --password YOUR_NTRIP_PASSWORD \
+//   --mount YOUR_NTRIP_MOUNTPOINT --print-raw
 
 #include <iostream>
 #include <iomanip>
@@ -81,11 +81,11 @@ struct Args {
     std::string port = "/dev/ttyUSB0";
     int baudrate = 115200;
     double serial_timeout = 1.0;
-    std::string server = "120.253.239.161";
+    std::string server = "YOUR_NTRIP_SERVER";
     int server_port = 8002;
-    std::string username = "ctea952";
-    std::string password = "cm286070";
-    std::string mount = "RTCM33_GRCE";
+    std::string username = "YOUR_NTRIP_USERNAME";
+    std::string password = "YOUR_NTRIP_PASSWORD";
+    std::string mount = "YOUR_NTRIP_MOUNTPOINT";
     double gga_period = 3.0;
     bool print_raw = false;
     bool no_color = false;

@@ -28,11 +28,11 @@ class NtripGnssNode(object):
         self.baudrate = int(rospy.get_param('~baudrate', 115200))
         self.frame_id = rospy.get_param('~frame_id', 'gps')
 
-        self.ntrip_server = rospy.get_param('~ntrip_server', '120.253.239.161')
+        self.ntrip_server = rospy.get_param('~ntrip_server', 'YOUR_NTRIP_SERVER')
         self.ntrip_port = int(rospy.get_param('~ntrip_port', 8002))
-        self.ntrip_username = rospy.get_param('~ntrip_username', 'ctea952')
-        self.ntrip_password = rospy.get_param('~ntrip_password', 'cm286070')
-        self.ntrip_mountpoint = rospy.get_param('~ntrip_mountpoint', 'RTCM33_GRCE')
+        self.ntrip_username = rospy.get_param('~ntrip_username', 'YOUR_NTRIP_USERNAME')
+        self.ntrip_password = rospy.get_param('~ntrip_password', 'YOUR_NTRIP_PASSWORD')
+        self.ntrip_mountpoint = rospy.get_param('~ntrip_mountpoint', 'YOUR_NTRIP_MOUNTPOINT')
 
         self.gga_period = float(rospy.get_param('~gga_period', 3.0))   # 秒
         self.serial_timeout = float(rospy.get_param('~serial_timeout', 1.0))

@@ -77,11 +77,11 @@ echo "source ~/catkin_ws/devel/setup.bash" >> ~/.bashrc
 - **关键参数**：  
   ```xml
       <!-- NTRIP服务器配置 -->
-      <arg name="ntrip_server" default="120.253.239.161"/>
+      <arg name="ntrip_server" default="YOUR_NTRIP_SERVER"/>
       <arg name="ntrip_port" default="8002"/>
-      <arg name="ntrip_username" default="ctea952"/>
-      <arg name="ntrip_password" default="cm286070"/>
-      <arg name="ntrip_mountpoint" default="RTCM33_GRCE"/>
+      <arg name="ntrip_username" default="YOUR_NTRIP_USERNAME"/>
+      <arg name="ntrip_password" default="YOUR_NTRIP_PASSWORD"/>
+      <arg name="ntrip_mountpoint" default="YOUR_NTRIP_MOUNTPOINT"/>
   ```
 
 ### 2.3 NTRIP CORS账号配置  
@@ -90,11 +90,11 @@ echo "source ~/catkin_ws/devel/setup.bash" >> ~/.bashrc
 
 | 参数名称 | 示例值 | 说明 |
 | --- | --- | --- |
-| **ntrip_server** | `120.253.239.161` | NTRIP服务器的IP地址或域名，指向提供差分改正数据的CORS中心服务器 |
+| **ntrip_server** | `YOUR_NTRIP_SERVER` | NTRIP服务器的IP地址或域名，指向提供差分改正数据的CORS中心服务器 |
 | **ntrip_port** | `8002` | NTRIP服务使用的TCP端口号（常用端口：2101/8001/8002） |
-| **ntrip_username**   | `ctea952` | 认证用户名（由CORS服务商提供，用于识别用户身份和计费） |
-| **ntrip_password**   | `cm286070` | 认证密码（与用户名配对，用于服务访问鉴权） |
-| **ntrip_mountpoint** | `RTCM33_GRCE` | 挂载点名称（指定获取哪种类型/区域的差分数据流） |
+| **ntrip_username**   | `YOUR_NTRIP_USERNAME` | 认证用户名（由CORS服务商提供，用于识别用户身份和计费） |
+| **ntrip_password**   | `YOUR_NTRIP_PASSWORD` | 认证密码（与用户名配对，用于服务访问鉴权） |
+| **ntrip_mountpoint** | `YOUR_NTRIP_MOUNTPOINT` | 挂载点名称（指定获取哪种类型/区域的差分数据流） |
 
 ---
 

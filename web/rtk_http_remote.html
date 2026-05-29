@@ -3,57 +3,64 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RTK HTTP 控制台</title>
+  <title>RTK 巡点调试台</title>
   <style>
     :root {
       --bg: #0f172a;
       --panel: #111827;
+      --panel2: #0b1220;
       --line: #334155;
       --text: #e5e7eb;
       --muted: #94a3b8;
       --ok: #10b981;
       --warn: #f59e0b;
+      --bad: #ef4444;
+      --blue: #2563eb;
       --btn: #1d4ed8;
       --btn2: #475569;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      background: linear-gradient(140deg, #0b1225, #111827 55%, #1f2937);
+      background: #0f172a;
       color: var(--text);
       font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
     }
-    .wrap { max-width: 980px; margin: 20px auto; padding: 0 14px 24px; }
+    .wrap { max-width: 1240px; margin: 14px auto; padding: 0 14px 24px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    h1 { margin: 0; font-size: 22px; }
+    h2 { margin: 0 0 10px; font-size: 15px; color: #cbd5e1; }
     .card {
-      background: rgba(17, 24, 39, 0.95);
+      background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 8px;
-      padding: 14px;
+      padding: 12px;
       margin-bottom: 12px;
     }
-    h1 { margin: 0 0 10px; font-size: 22px; }
-    h2 { margin: 0 0 10px; font-size: 16px; color: #cbd5e1; }
     .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 10px; }
     .col-3 { grid-column: span 3; }
     .col-4 { grid-column: span 4; }
+    .col-5 { grid-column: span 5; }
     .col-6 { grid-column: span 6; }
+    .col-7 { grid-column: span 7; }
     .col-8 { grid-column: span 8; }
     .col-12 { grid-column: span 12; }
-    @media (max-width: 860px) {
-      .col-3, .col-4, .col-6, .col-8 { grid-column: span 12; }
+    @media (max-width: 900px) {
+      .col-3, .col-4, .col-5, .col-6, .col-7, .col-8 { grid-column: span 12; }
+      .topbar { align-items: flex-start; flex-direction: column; }
     }
-    label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 5px; }
+    label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
     input, select, textarea {
       width: 100%;
       border: 1px solid var(--line);
       border-radius: 6px;
-      padding: 10px;
-      background: #0b1220;
+      padding: 9px;
+      background: var(--panel2);
       color: var(--text);
       font-size: 14px;
     }
-    textarea { min-height: 100px; resize: vertical; }
-    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    textarea { min-height: 84px; resize: vertical; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     button {
       border: 1px solid #1e3a8a;
       border-radius: 6px;
@@ -62,10 +69,44 @@
       background: var(--btn);
       cursor: pointer;
       font-size: 14px;
+      min-height: 36px;
     }
-    button.secondary {
-      border-color: #475569;
-      background: var(--btn2);
+    button.secondary { border-color: #475569; background: var(--btn2); }
+    button.danger { border-color: #991b1b; background: #b91c1c; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 5px 9px;
+      background: var(--panel2);
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .pill.ok { color: #bbf7d0; border-color: #166534; background: #052e1a; }
+    .pill.warn { color: #fde68a; border-color: #92400e; background: #2b1704; }
+    .pill.bad { color: #fecaca; border-color: #991b1b; background: #2b0909; }
+    .metric {
+      background: var(--panel2);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      min-height: 82px;
+    }
+    .metric .name { color: var(--muted); font-size: 12px; }
+    .metric .value { margin-top: 6px; font-size: 24px; font-weight: 700; line-height: 1.15; }
+    .metric .sub { margin-top: 4px; color: var(--muted); font-size: 12px; }
+    .value.ok { color: var(--ok); }
+    .value.warn { color: var(--warn); }
+    .value.bad { color: var(--bad); }
+    #mapCanvas {
+      display: block;
+      width: 100%;
+      height: 520px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fafc;
     }
     .log {
       white-space: pre-wrap;
@@ -73,333 +114,637 @@
       border: 1px solid var(--line);
       border-radius: 6px;
       padding: 10px;
-      min-height: 180px;
+      min-height: 160px;
+      max-height: 300px;
+      overflow: auto;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       font-size: 12px;
     }
     .ok { color: var(--ok); }
     .warn { color: var(--warn); }
+    .bad { color: var(--bad); }
   </style>
 </head>
 <body>
   <div class="wrap">
+    <div class="topbar">
+      <h1>RTK 巡点调试台</h1>
+      <div class="row">
+        <span id="httpState" class="pill warn">HTTP 未连接</span>
+        <span id="rtkState" class="pill warn">RTK 未知</span>
+        <span id="navState" class="pill warn">导航未知</span>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="col-7">
+        <div class="card">
+          <h2>实时地图</h2>
+          <canvas id="mapCanvas"></canvas>
+          <div class="row" style="margin-top:8px">
+            <span class="pill">红点：航点</span>
+            <span class="pill">蓝点：车辆</span>
+            <span class="pill">蓝线：巡点路径</span>
+            <span class="pill">坐标：以 wp_1 为原点 ENU</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-5">
+        <div class="card">
+          <h2>任务状态</h2>
+          <div class="grid">
+            <div class="col-6 metric">
+              <div class="name">当前目标</div>
+              <div id="targetValue" class="value">--</div>
+              <div id="progressValue" class="sub">--</div>
+            </div>
+            <div class="col-6 metric">
+              <div class="name">目标距离</div>
+              <div id="distanceValue" class="value">--</div>
+              <div id="pathErrorValue" class="sub">cross track --</div>
+            </div>
+            <div class="col-6 metric">
+              <div class="name">航向误差</div>
+              <div id="headingErrorValue" class="value">--</div>
+              <div id="headingSourceValue" class="sub">source --</div>
+            </div>
+            <div class="col-6 metric">
+              <div class="name">双天线航向</div>
+              <div id="headingValue" class="value">--</div>
+              <div id="cogValue" class="sub">COG --</div>
+            </div>
+            <div class="col-6 metric">
+              <div class="name">控制输出</div>
+              <div id="cmdValue" class="value">--</div>
+              <div class="sub">linear.x / angular.z</div>
+            </div>
+            <div class="col-6 metric">
+              <div class="name">当前位置</div>
+              <div id="positionValue" class="value" style="font-size:16px">--</div>
+              <div id="positionSubValue" class="sub">--</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>快捷命令</h2>
+          <div class="row">
+            <button onclick="sendJson({cmd:'start_follow'})">开始跟踪</button>
+            <button onclick="sendJson({cmd:'stop'})" class="danger">急停</button>
+            <button onclick="sendJson({cmd:'enable_nav', value:false})" class="secondary">导航停用</button>
+            <button onclick="sendJson({cmd:'capture_waypoint'})">打点</button>
+            <button onclick="sendJson({cmd:'clear_waypoints'})" class="secondary">清空航点</button>
+            <button onclick="refreshState()">刷新状态</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>航点微调</h2>
+          <div class="grid">
+            <div class="col-6">
+              <label>航点</label>
+              <select id="waypointSelect"></select>
+            </div>
+            <div class="col-6">
+              <label>步长（米）</label>
+              <input id="waypointNudgeStep" type="number" step="0.05" value="0.20">
+            </div>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <button onclick="nudgeSelectedWaypoint(0, 1)">北</button>
+            <button onclick="nudgeSelectedWaypoint(0, -1)">南</button>
+            <button onclick="nudgeSelectedWaypoint(1, 0)">东</button>
+            <button onclick="nudgeSelectedWaypoint(-1, 0)">西</button>
+            <button onclick="deleteSelectedWaypoint()" class="secondary">删除选中点</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>巡点参数</h2>
+          <div class="grid">
+            <div class="col-6">
+              <label>到点半径 arrival_radius_m</label>
+              <input id="navArrivalRadius" type="number" step="0.01" value="0.10">
+            </div>
+            <div class="col-6">
+              <label>前视距离 lookahead_distance_m</label>
+              <input id="navLookahead" type="number" step="0.01" value="0.10">
+            </div>
+            <div class="col-6">
+              <label>最大线速度</label>
+              <input id="navMaxLinear" type="number" step="0.01" value="5.00">
+            </div>
+            <div class="col-6">
+              <label>最小线速度</label>
+              <input id="navMinLinear" type="number" step="0.01" value="0.50">
+            </div>
+            <div class="col-6">
+              <label>最大角速度</label>
+              <input id="navMaxAngular" type="number" step="0.05" value="4.00">
+            </div>
+            <div class="col-6">
+              <label>转向 KP</label>
+              <input id="navHeadingKp" type="number" step="0.1" value="1.20">
+            </div>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <button onclick="applyNavParams()">应用巡点参数</button>
+            <button onclick="saveNavDefaults()" class="secondary">保存为默认</button>
+            <button onclick="resetNavDefaults()" class="secondary">恢复内置默认</button>
+            <button onclick="setNavPreset(0.10,0.10,5.00,0.50,4.00,1.2)" class="secondary">当前</button>
+            <button onclick="setNavPreset(0.20,0.70,1.10,1.00,1.00,1.2)" class="secondary">慢</button>
+            <button onclick="setNavPreset(0.30,0.90,1.50,1.00,1.50,1.5)" class="secondary">中</button>
+            <button onclick="setNavPreset(0.50,1.20,2.00,1.00,2.00,1.8)" class="secondary">快</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="card">
-      <h1>RTK HTTP 控制台</h1>
+      <h2>连接设置</h2>
       <div class="grid">
         <div class="col-4">
           <label>Base URL</label>
-          <input id="baseUrl" value="http://127.0.0.1:8080">
+          <input id="baseUrl" value="http://192.168.162.1:8080">
         </div>
-        <div class="col-4">
+        <div class="col-3">
           <label>API Path</label>
           <input id="apiPath" value="/api/command">
         </div>
-        <div class="col-4">
+        <div class="col-2">
           <label>Method</label>
-          <select id="method">
-            <option>POST</option>
-            <option>GET</option>
-            <option>PUT</option>
-          </select>
+          <select id="method"><option>POST</option><option>GET</option><option>PUT</option></select>
         </div>
-        <div class="col-6">
-          <label>Header: Content-Type</label>
-          <select id="contentType">
-            <option value="application/json">application/json</option>
-            <option value="text/plain">text/plain</option>
-          </select>
-        </div>
-        <div class="col-6">
-          <label>Header: Authorization (可选)</label>
-          <input id="auth" placeholder="Bearer xxxxx">
+        <div class="col-3">
+          <label>Content-Type</label>
+          <select id="contentType"><option value="application/json">application/json</option><option value="text/plain">text/plain</option></select>
         </div>
       </div>
       <div class="row" style="margin-top:10px">
         <button onclick="testHttp()">测试HTTP连接</button>
+        <button onclick="sendJson({cmd:'check_control_conflicts'})" class="secondary">检查控制冲突</button>
       </div>
     </div>
 
-    <div class="card">
-      <h2>快捷命令（JSON 包）</h2>
-      <div class="row">
-        <button onclick="sendJson({cmd:'enable_nav', value:true})">导航启用</button>
-        <button onclick="sendJson({cmd:'enable_nav', value:false})" class="secondary">导航停用</button>
-        <button onclick="sendJson({cmd:'capture_waypoint'})">打点</button>
-        <button onclick="sendJson({cmd:'clear_waypoints'})" class="secondary">清空航点</button>
-        <button onclick="sendJson({cmd:'start_follow'})">开始跟踪</button>
-        <button onclick="sendJson({cmd:'stop'})" class="secondary">急停</button>
+    <div class="grid">
+      <div class="col-6">
+        <div class="card">
+          <h2>控制板目标地址（ESP32 UDP）</h2>
+          <div class="grid">
+            <div class="col-8">
+              <label>控制板 IP</label>
+              <input id="controlIp" value="192.168.162.239">
+            </div>
+            <div class="col-4">
+              <label>控制板端口</label>
+              <input id="controlPort" type="number" value="8888">
+            </div>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <button onclick="applyControlTarget()">应用到底盘节点</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-6">
+        <div class="card">
+          <h2>手动遥控（cmd_vel）</h2>
+          <div class="grid">
+            <div class="col-6">
+              <label>线速度 linear_x</label>
+              <input id="teleopLinear" type="number" step="0.01" value="1.00">
+            </div>
+            <div class="col-6">
+              <label>角速度 angular_z</label>
+              <input id="teleopAngular" type="number" step="0.01" value="0.50">
+            </div>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <button id="btnForward">前进</button>
+            <button id="btnBackward">后退</button>
+            <button id="btnLeft">左转</button>
+            <button id="btnRight">右转</button>
+            <button onclick="teleopStop()" class="secondary">停止</button>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="card">
-      <h2>控制板目标地址（ESP32 UDP）</h2>
-      <div class="grid">
-        <div class="col-6">
-          <label>控制板 IP</label>
-          <input id="controlIp" value="192.168.54.239">
-        </div>
-        <div class="col-6">
-          <label>控制板端口</label>
-          <input id="controlPort" type="number" value="8888">
-        </div>
-      </div>
-      <div class="row">
-        <button onclick="applyControlTarget()">应用到底盘节点</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>HTTP 遥控小车（cmd_vel）</h2>
-      <div class="grid">
-        <div class="col-6">
-          <label>线速度 linear_x (m/s)</label>
-          <input id="teleopLinear" type="number" step="0.01" value="0.12">
-        </div>
-        <div class="col-6">
-          <label>角速度 angular_z (rad/s)</label>
-          <input id="teleopAngular" type="number" step="0.01" value="0.50">
-        </div>
-      </div>
-      <div class="row">
-        <button class="secondary" onclick="setTeleopSpeed(0.08, 0.35)">低速</button>
-        <button class="secondary" onclick="setTeleopSpeed(0.12, 0.50)">中速</button>
-        <button class="secondary" onclick="setTeleopSpeed(0.18, 0.70)">高速</button>
-        <button class="secondary" onclick="setTeleopSpeed(0.25, 0.90)">最快</button>
-      </div>
-      <div class="row">
-        <button id="btnForward">前进</button>
-        <button id="btnBackward">后退</button>
-        <button id="btnLeft">左转</button>
-        <button id="btnRight">右转</button>
-        <button onclick="teleopStop()" class="secondary">停止</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>自定义 JSON</h2>
-      <div class="grid">
-        <div class="col-12">
-          <label>Body (JSON)</label>
+    <div class="grid">
+      <div class="col-6">
+        <div class="card">
+          <h2>自定义 JSON</h2>
           <textarea id="jsonBody">{"cmd":"capture_waypoint","name":"p1"}</textarea>
+          <div class="row" style="margin-top:8px">
+            <button onclick="sendCustomJson()">发送 JSON</button>
+          </div>
         </div>
       </div>
-      <div class="row">
-        <button onclick="sendCustomJson()">发送 JSON</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>自定义文本</h2>
-      <div class="grid">
-        <div class="col-12">
-          <label>Body (Text)</label>
-          <textarea id="textBody">START_FOLLOW</textarea>
+      <div class="col-6">
+        <div class="card">
+          <h2>日志</h2>
+          <div id="log" class="log"></div>
+          <div class="row" style="margin-top:8px">
+            <button class="secondary" onclick="clearLog()">清空日志</button>
+          </div>
         </div>
-      </div>
-      <div class="row">
-        <button onclick="sendCustomText()">发送 Text</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>日志</h2>
-      <div id="log" class="log"></div>
-      <div class="row" style="margin-top:8px">
-        <button class="secondary" onclick="clearLog()">清空日志</button>
       </div>
     </div>
   </div>
 
   <script>
-    function endpoint() {
-      const base = document.getElementById('baseUrl').value.trim().replace(/\/+$/, '');
-      const path = document.getElementById('apiPath').value.trim();
-      return `${base}${path.startsWith('/') ? path : '/' + path}`;
-    }
+    let latestState = null;
+    let holdTimer = null;
+    let holding = false;
+    const navDefaultKey = 'rtk_http_remote.nav_defaults.v1';
+    const builtinNavDefaults = {
+      arrivalRadius: 0.10,
+      lookahead: 0.10,
+      maxLinear: 5.00,
+      minLinear: 0.50,
+      maxAngular: 4.00,
+      headingKp: 1.20
+    };
 
+    function baseUrl() {
+      return document.getElementById('baseUrl').value.trim().replace(/\/+$/, '');
+    }
+    function endpoint() {
+      const path = document.getElementById('apiPath').value.trim();
+      return `${baseUrl()}${path.startsWith('/') ? path : '/' + path}`;
+    }
+    function stateEndpoint() {
+      return `${baseUrl()}/api/state`;
+    }
     function logLine(text, cls) {
       const node = document.getElementById('log');
-      const t = new Date().toLocaleTimeString();
       const line = document.createElement('div');
       if (cls) line.className = cls;
-      line.textContent = `[${t}] ${text}`;
+      line.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
       node.appendChild(line);
       node.scrollTop = node.scrollHeight;
     }
-
     function clearLog() {
       document.getElementById('log').innerHTML = '';
     }
-
     async function sendRaw(body) {
-      const url = endpoint();
       const method = document.getElementById('method').value;
-      const contentType = document.getElementById('contentType').value;
-      const auth = document.getElementById('auth').value.trim();
-      const headers = { 'Content-Type': contentType };
-      if (auth) headers['Authorization'] = auth;
-
-      logLine(`-> ${method} ${url}`);
+      const headers = { 'Content-Type': document.getElementById('contentType').value };
+      logLine(`-> ${method} ${endpoint()}`);
       logLine(`-> body: ${body}`);
-
       try {
-        const resp = await fetch(url, {
-          method,
-          headers,
-          body: method === 'GET' ? undefined : body,
-        });
+        const resp = await fetch(endpoint(), { method, headers, body: method === 'GET' ? undefined : body });
         const txt = await resp.text();
-        if (resp.ok) {
-          logLine(`<- ${resp.status} ${txt || '(empty)'}`, 'ok');
-        } else {
-          logLine(`<- ${resp.status} ${txt || '(error)'}`, 'warn');
-        }
+        logLine(`<- ${resp.status} ${txt || '(empty)'}`, resp.ok ? 'ok' : 'warn');
+        refreshState();
       } catch (err) {
         logLine(`xx 请求失败: ${err.message}`, 'warn');
-        logLine('提示: 若跨域报错，请让地瓜派接口加 CORS 头。', 'warn');
       }
     }
-
     function sendJson(obj) {
       document.getElementById('contentType').value = 'application/json';
       sendRaw(JSON.stringify(obj));
     }
-
     async function testHttp() {
-      const url = document.getElementById('baseUrl').value.trim().replace(/\/+$/, '') + '/healthz';
-      logLine(`-> GET ${url}`);
       try {
-        const resp = await fetch(url);
+        const resp = await fetch(`${baseUrl()}/healthz`);
         const txt = await resp.text();
-        logLine(`<- ${resp.status} ${txt || '(empty)'}`, resp.ok ? 'ok' : 'warn');
+        logLine(`healthz <- ${resp.status} ${txt}`, resp.ok ? 'ok' : 'warn');
+        setPill('httpState', resp.ok ? 'HTTP 已连接' : 'HTTP 异常', resp.ok ? 'ok' : 'warn');
       } catch (err) {
-        logLine(`xx HTTP连接失败: ${err.message}`, 'warn');
+        setPill('httpState', 'HTTP 断开', 'bad');
+        logLine(`HTTP连接失败: ${err.message}`, 'warn');
       }
     }
-
-    function sendCustomJson() {
-      const text = document.getElementById('jsonBody').value.trim();
+    async function refreshState() {
       try {
-        const obj = JSON.parse(text);
-        document.getElementById('contentType').value = 'application/json';
-        sendRaw(JSON.stringify(obj));
+        const resp = await fetch(stateEndpoint());
+        latestState = await resp.json();
+        setPill('httpState', 'HTTP 已连接', 'ok');
+        renderState(latestState);
+      } catch (err) {
+        setPill('httpState', 'HTTP 断开', 'bad');
+      }
+    }
+    function sendCustomJson() {
+      try {
+        sendJson(JSON.parse(document.getElementById('jsonBody').value.trim()));
       } catch (err) {
         logLine(`JSON 格式错误: ${err.message}`, 'warn');
       }
     }
-
-    function sendCustomText() {
-      const text = document.getElementById('textBody').value;
-      document.getElementById('contentType').value = 'text/plain';
-      sendRaw(text);
-    }
-
-    function teleop(linearX, angularZ) {
-      const vx = Number(linearX);
-      const wz = Number(angularZ);
-      sendJson({
-        cmd: 'cmd_vel',
-        linear_x: vx,
-        angular_z: wz
-      });
-    }
-
-    function setTeleopSpeed(linear, angular) {
-      document.getElementById('teleopLinear').value = Number(linear).toFixed(2);
-      document.getElementById('teleopAngular').value = Number(angular).toFixed(2);
-      logLine(`速度档位: linear_x=${Number(linear).toFixed(2)} m/s, angular_z=${Number(angular).toFixed(2)} rad/s`, 'ok');
-    }
-
     function readNumber(id, fallback) {
       const value = Number(document.getElementById(id).value);
       return Number.isFinite(value) ? value : fallback;
     }
-
-    function teleopForward() {
-      const v = readNumber('teleopLinear', 0);
-      teleop(v, 0);
+    function teleop(linearX, angularZ) {
+      sendJson({ cmd: 'cmd_vel', linear_x: Number(linearX), angular_z: Number(angularZ) });
     }
-
-    function teleopBackward() {
-      const v = readNumber('teleopLinear', 0);
-      teleop(-Math.abs(v), 0);
-    }
-
-    function teleopLeft() {
-      const w = readNumber('teleopAngular', 0);
-      teleop(0, Math.abs(w));
-    }
-
-    function teleopRight() {
-      const w = readNumber('teleopAngular', 0);
-      teleop(0, -Math.abs(w));
-    }
-
-    function teleopStop() {
-      teleop(0, 0);
-    }
-
+    function teleopForward() { teleop(readNumber('teleopLinear', 0), 0); }
+    function teleopBackward() { teleop(-Math.abs(readNumber('teleopLinear', 0)), 0); }
+    function teleopLeft() { teleop(0, Math.abs(readNumber('teleopAngular', 0))); }
+    function teleopRight() { teleop(0, -Math.abs(readNumber('teleopAngular', 0))); }
+    function teleopStop() { teleop(0, 0); }
     function applyControlTarget() {
-      const ip = document.getElementById('controlIp').value.trim();
-      const port = Number(document.getElementById('controlPort').value || 8888);
       sendJson({
         cmd: 'set_control_ip',
-        ip: ip,
-        port: port
+        ip: document.getElementById('controlIp').value.trim(),
+        port: Number(document.getElementById('controlPort').value || 8888)
       });
     }
-
-    let holdTimer = null;
-    let holding = false;
-
+    function setNavPreset(arrivalRadius, lookahead, maxLinear, minLinear, maxAngular, headingKp) {
+      document.getElementById('navArrivalRadius').value = arrivalRadius.toFixed(2);
+      document.getElementById('navLookahead').value = lookahead.toFixed(2);
+      document.getElementById('navMaxLinear').value = maxLinear.toFixed(2);
+      document.getElementById('navMinLinear').value = minLinear.toFixed(2);
+      document.getElementById('navMaxAngular').value = maxAngular.toFixed(2);
+      document.getElementById('navHeadingKp').value = headingKp.toFixed(2);
+      applyNavParams();
+    }
+    function currentNavDefaults() {
+      return {
+        arrivalRadius: readNumber('navArrivalRadius', builtinNavDefaults.arrivalRadius),
+        lookahead: readNumber('navLookahead', builtinNavDefaults.lookahead),
+        maxLinear: readNumber('navMaxLinear', builtinNavDefaults.maxLinear),
+        minLinear: readNumber('navMinLinear', builtinNavDefaults.minLinear),
+        maxAngular: readNumber('navMaxAngular', builtinNavDefaults.maxAngular),
+        headingKp: readNumber('navHeadingKp', builtinNavDefaults.headingKp)
+      };
+    }
+    function loadNavDefaults() {
+      let defaults = builtinNavDefaults;
+      try {
+        const saved = JSON.parse(localStorage.getItem(navDefaultKey) || 'null');
+        if (saved && typeof saved === 'object') defaults = { ...builtinNavDefaults, ...saved };
+      } catch (err) {
+        defaults = builtinNavDefaults;
+      }
+      document.getElementById('navArrivalRadius').value = Number(defaults.arrivalRadius).toFixed(2);
+      document.getElementById('navLookahead').value = Number(defaults.lookahead).toFixed(2);
+      document.getElementById('navMaxLinear').value = Number(defaults.maxLinear).toFixed(2);
+      document.getElementById('navMinLinear').value = Number(defaults.minLinear).toFixed(2);
+      document.getElementById('navMaxAngular').value = Number(defaults.maxAngular).toFixed(2);
+      document.getElementById('navHeadingKp').value = Number(defaults.headingKp).toFixed(2);
+    }
+    function saveNavDefaults() {
+      localStorage.setItem(navDefaultKey, JSON.stringify(currentNavDefaults()));
+      logLine('已保存当前巡点参数为网页默认值', 'ok');
+    }
+    function resetNavDefaults() {
+      localStorage.removeItem(navDefaultKey);
+      loadNavDefaults();
+      logLine('已恢复内置巡点默认值', 'ok');
+    }
+    function applyNavParams() {
+      sendJson({
+        cmd: 'set_nav_params',
+        arrival_radius_m: readNumber('navArrivalRadius', builtinNavDefaults.arrivalRadius),
+        lookahead_distance_m: readNumber('navLookahead', builtinNavDefaults.lookahead),
+        max_linear_speed: readNumber('navMaxLinear', builtinNavDefaults.maxLinear),
+        min_linear_speed: readNumber('navMinLinear', builtinNavDefaults.minLinear),
+        max_angular_speed: readNumber('navMaxAngular', builtinNavDefaults.maxAngular),
+        heading_kp: readNumber('navHeadingKp', builtinNavDefaults.headingKp)
+      });
+    }
+    function selectedWaypointIndex() {
+      const node = document.getElementById('waypointSelect');
+      const value = Number(node.value);
+      return Number.isInteger(value) ? value : -1;
+    }
+    function nudgeSelectedWaypoint(eastSign, northSign) {
+      const index = selectedWaypointIndex();
+      if (index < 0) {
+        logLine('没有可微调的航点', 'warn');
+        return;
+      }
+      const step = Math.abs(readNumber('waypointNudgeStep', 0.2));
+      sendJson({
+        cmd: 'nudge_waypoint',
+        index,
+        dx_m: eastSign * step,
+        dy_m: northSign * step
+      });
+      setTimeout(refreshState, 250);
+    }
+    function deleteSelectedWaypoint() {
+      const index = selectedWaypointIndex();
+      if (index < 0) {
+        logLine('没有可删除的航点', 'warn');
+        return;
+      }
+      sendJson({ cmd: 'delete_waypoint', index });
+      setTimeout(refreshState, 250);
+    }
     function startHold(sendFn) {
       stopHold();
       holding = true;
       sendFn();
-      holdTimer = setInterval(() => {
-        if (!holding) return;
-        sendFn();
-      }, 160);
+      holdTimer = setInterval(() => { if (holding) sendFn(); }, 160);
     }
-
     function stopHold() {
+      const shouldStop = holding;
       holding = false;
-      if (holdTimer) {
-        clearInterval(holdTimer);
-        holdTimer = null;
-      }
-      teleopStop();
+      if (holdTimer) clearInterval(holdTimer);
+      holdTimer = null;
+      if (shouldStop) teleopStop();
     }
-
     function bindHold(buttonId, sendFn) {
       const btn = document.getElementById(buttonId);
-      if (!btn) return;
-
-      btn.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        startHold(sendFn);
-      });
+      btn.addEventListener('mousedown', e => { e.preventDefault(); startHold(sendFn); });
       btn.addEventListener('mouseup', stopHold);
       btn.addEventListener('mouseleave', stopHold);
-
-      btn.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        startHold(sendFn);
-      }, { passive: false });
-      btn.addEventListener('touchend', (e) => {
-        e.preventDefault();
-        stopHold();
-      }, { passive: false });
+      btn.addEventListener('touchstart', e => { e.preventDefault(); startHold(sendFn); }, { passive: false });
+      btn.addEventListener('touchend', e => { e.preventDefault(); stopHold(); }, { passive: false });
       btn.addEventListener('touchcancel', stopHold);
+    }
+
+    function setPill(id, text, state) {
+      const node = document.getElementById(id);
+      node.textContent = text;
+      node.className = `pill ${state || ''}`;
+    }
+    function fmt(value, digits, suffix) {
+      if (value === null || value === undefined || Number.isNaN(Number(value))) return '--';
+      return `${Number(value).toFixed(digits)}${suffix || ''}`;
+    }
+    function stale(age, limit) {
+      return age === null || age === undefined || age > limit;
+    }
+    function renderState(state) {
+      const gnss = state.gnss;
+      const status = state.status || {};
+      const parsed = status.parsed || {};
+      const heading = state.heading || {};
+      const cog = state.cog || {};
+      const cmd = state.cmd_vel || {};
+      updateWaypointSelect(state);
+
+      if (gnss && !stale(gnss.age_sec, 3)) setPill('rtkState', `RTK status ${gnss.status}`, 'ok');
+      else setPill('rtkState', 'RTK 数据过期', 'bad');
+
+      const mode = parsed.mode || status.text || '--';
+      const tracking = mode === 'tracking' || mode === 'path_tracking';
+      setPill('navState', tracking ? '导航中' : mode, tracking ? 'ok' : 'warn');
+
+      document.getElementById('targetValue').textContent = parsed.target || '--';
+      document.getElementById('progressValue').textContent = parsed.progress || status.text || '--';
+      document.getElementById('distanceValue').textContent = fmt(parsed.distance_m, 2, 'm');
+      document.getElementById('pathErrorValue').textContent =
+        `cross ${fmt(parsed.cross_track_m, 2, 'm')} / remain ${fmt(parsed.remaining_m, 2, 'm')}`;
+      document.getElementById('headingErrorValue').textContent = fmt(parsed.heading_error_deg, 1, '°');
+      document.getElementById('headingErrorValue').className =
+        `value ${Math.abs(parsed.heading_error_deg || 0) < 15 ? 'ok' : Math.abs(parsed.heading_error_deg || 0) < 60 ? 'warn' : 'bad'}`;
+      document.getElementById('headingSourceValue').textContent = `source ${parsed.source || '--'}`;
+      document.getElementById('headingValue').textContent = fmt(heading.value, 1, '°');
+      document.getElementById('cogValue').textContent = `COG ${fmt(cog.value, 1, '°')}`;
+      document.getElementById('cmdValue').textContent = `${fmt(cmd.linear_x, 2, '')} / ${fmt(cmd.angular_z, 2, '')}`;
+      document.getElementById('positionValue').textContent = gnss ? `${fmt(gnss.x, 1, 'm')}, ${fmt(gnss.y, 1, 'm')}` : '--';
+      document.getElementById('positionSubValue').textContent = gnss ? `${fmt(gnss.latitude, 8, '')}, ${fmt(gnss.longitude, 8, '')}` : '--';
+      drawMap(state);
+    }
+    function updateWaypointSelect(state) {
+      const select = document.getElementById('waypointSelect');
+      const previous = select.value;
+      const waypoints = (state.waypoints && state.waypoints.items) || [];
+      select.innerHTML = '';
+      waypoints.forEach((p, i) => {
+        const option = document.createElement('option');
+        option.value = String(i);
+        option.textContent = `${i + 1}. ${p.name} (${fmt(p.x, 2, 'm')}, ${fmt(p.y, 2, 'm')})`;
+        select.appendChild(option);
+      });
+      if (!waypoints.length) {
+        const option = document.createElement('option');
+        option.value = '-1';
+        option.textContent = '暂无航点';
+        select.appendChild(option);
+      } else if ([...select.options].some(option => option.value === previous)) {
+        select.value = previous;
+      }
+    }
+    function drawMap(state) {
+      const canvas = document.getElementById('mapCanvas');
+      const ratio = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = Math.max(1, Math.floor(rect.width * ratio));
+      canvas.height = Math.max(1, Math.floor(rect.height * ratio));
+      const ctx = canvas.getContext('2d');
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      const w = rect.width;
+      const h = rect.height;
+      ctx.clearRect(0, 0, w, h);
+
+      const waypoints = (state.waypoints && state.waypoints.items) || [];
+      const vehicle = state.gnss && Number.isFinite(state.gnss.x) ? state.gnss : null;
+      const pts = waypoints.map(p => ({ x: p.x, y: p.y, name: p.name }));
+      if (vehicle) pts.push({ x: vehicle.x, y: vehicle.y, name: 'car' });
+      if (!pts.length) {
+        ctx.fillStyle = '#475569';
+        ctx.font = '15px sans-serif';
+        ctx.fillText('暂无航点/定位数据', 24, 40);
+        return;
+      }
+      const xs = pts.map(p => p.x);
+      const ys = pts.map(p => p.y);
+      const minX = Math.min(...xs), maxX = Math.max(...xs);
+      const minY = Math.min(...ys), maxY = Math.max(...ys);
+      const spanX = Math.max(maxX - minX, 1);
+      const spanY = Math.max(maxY - minY, 1);
+      const pad = 56;
+      const scale = Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanY, 60);
+      const cx = (minX + maxX) / 2;
+      const cy = (minY + maxY) / 2;
+      const sx = x => w / 2 + (x - cx) * scale;
+      const sy = y => h / 2 - (y - cy) * scale;
+
+      drawGrid(ctx, w, h, scale, sx, sy, minX, maxX, minY, maxY);
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#2563eb';
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      waypoints.forEach((p, i) => {
+        if (i === 0) ctx.moveTo(sx(p.x), sy(p.y));
+        else ctx.lineTo(sx(p.x), sy(p.y));
+      });
+      ctx.stroke();
+
+      waypoints.forEach((p, i) => {
+        ctx.beginPath();
+        ctx.fillStyle = '#dc2626';
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.arc(sx(p.x), sy(p.y), 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#0f172a';
+        ctx.font = '700 13px sans-serif';
+        ctx.fillText(`${p.name}`, sx(p.x) + 11, sy(p.y) - 10);
+        if (i > 0) {
+          const prev = waypoints[i - 1];
+          const d = Math.hypot(p.x - prev.x, p.y - prev.y);
+          ctx.fillStyle = '#1d4ed8';
+          ctx.font = '700 12px sans-serif';
+          ctx.fillText(`${d.toFixed(1)}m`, (sx(p.x) + sx(prev.x)) / 2 + 8, (sy(p.y) + sy(prev.y)) / 2 - 8);
+        }
+      });
+
+      if (vehicle) {
+        const x = sx(vehicle.x), y = sy(vehicle.y);
+        ctx.beginPath();
+        ctx.fillStyle = '#0891b2';
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.arc(x, y, 9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        const heading = latestState && latestState.heading && Number.isFinite(latestState.heading.value)
+          ? latestState.heading.value : null;
+        if (heading !== null) {
+          const rad = heading * Math.PI / 180;
+          ctx.strokeStyle = '#0891b2';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + Math.sin(rad) * 34, y - Math.cos(rad) * 34);
+          ctx.stroke();
+        }
+        ctx.fillStyle = '#0f172a';
+        ctx.font = '700 13px sans-serif';
+        ctx.fillText('car', x + 12, y + 4);
+      }
+    }
+    function drawGrid(ctx, w, h, scale, sx, sy, minX, maxX, minY, maxY) {
+      const step = scale > 40 ? 1 : scale > 18 ? 2 : 5;
+      const startX = Math.floor((minX - 3) / step) * step;
+      const endX = Math.ceil((maxX + 3) / step) * step;
+      const startY = Math.floor((minY - 3) / step) * step;
+      const endY = Math.ceil((maxY + 3) / step) * step;
+      ctx.strokeStyle = '#dbe3ef';
+      ctx.lineWidth = 1;
+      for (let x = startX; x <= endX; x += step) {
+        ctx.beginPath(); ctx.moveTo(sx(x), 0); ctx.lineTo(sx(x), h); ctx.stroke();
+      }
+      for (let y = startY; y <= endY; y += step) {
+        ctx.beginPath(); ctx.moveTo(0, sy(y)); ctx.lineTo(w, sy(y)); ctx.stroke();
+      }
+      ctx.fillStyle = '#64748b';
+      ctx.font = '12px sans-serif';
+      ctx.fillText(`grid ${step}m`, 14, h - 14);
     }
 
     bindHold('btnForward', teleopForward);
     bindHold('btnBackward', teleopBackward);
     bindHold('btnLeft', teleopLeft);
     bindHold('btnRight', teleopRight);
-
     window.addEventListener('mouseup', stopHold);
     window.addEventListener('blur', stopHold);
+    window.addEventListener('resize', () => latestState && drawMap(latestState));
+    loadNavDefaults();
+    testHttp();
+    refreshState();
+    setInterval(refreshState, 500);
   </script>
 </body>
 </html>

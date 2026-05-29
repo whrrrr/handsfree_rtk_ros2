@@ -12,7 +12,7 @@ class DiffDriveUdp(Node):
         super().__init__('diff_drive_udp')
 
         self.declare_parameter('cmd_vel_topic', '/cmd_vel')
-        self.declare_parameter('esp32_ip', '192.168.153.239')
+        self.declare_parameter('esp32_ip', '192.168.162.239')
         self.declare_parameter('esp32_port', 8888)
         self.declare_parameter('wheel_base_m', 0.355)
         self.declare_parameter('max_wheel_speed_mps', 0.0)
@@ -22,7 +22,7 @@ class DiffDriveUdp(Node):
         self.declare_parameter('invert_linear', True)
         self.declare_parameter('invert_left', False)
         self.declare_parameter('invert_right', False)
-        self.declare_parameter('swap_wheels', False)
+        self.declare_parameter('swap_wheels', True)
         self.declare_parameter('enabled', True)
 
         self.cmd_vel_topic = self.get_parameter('cmd_vel_topic').value

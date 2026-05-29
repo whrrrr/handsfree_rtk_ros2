@@ -129,6 +129,7 @@ class RTKTagDriver(Node):
     def _publish_ths(self, parsed):
         heading = parsed.get('heading')
         if heading is not None and parsed.get('valid', False):
+            heading = (heading - 180.0) % 360.0
             self.heading_pub.publish(Float64(data=heading))
             self.get_logger().info('%s: heading=%.3f' % (parsed.get('type', 'HEADING'), heading))
 

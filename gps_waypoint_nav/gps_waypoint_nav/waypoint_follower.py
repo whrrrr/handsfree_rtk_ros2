@@ -11,7 +11,7 @@ from sensor_msgs.msg import NavSatFix, NavSatStatus
 from std_msgs.msg import Float64, String
 from visualization_msgs.msg import Marker
 
-from gps_waypoint_nav.geo import enu_distance_and_bearing, latlon_to_enu, wrap_angle
+from gps_waypoint_nav.geo import enu_distance_and_bearing, enu_to_latlon, latlon_to_enu, wrap_angle
 
 
 @dataclass
@@ -19,6 +19,14 @@ class Waypoint:
     latitude: float
     longitude: float
     name: str
+
+
+@dataclass
+class PathProjection:
+    s: float
+    xy: tuple
+    cross_track_error: float
+    segment_index: int
 
 
 class WaypointFollower(Node):
@@ -33,11 +41,12 @@ class WaypointFollower(Node):
         self.declare_parameter('waypoint_latitudes', Parameter.Type.DOUBLE_ARRAY)
         self.declare_parameter('waypoint_longitudes', Parameter.Type.DOUBLE_ARRAY)
         self.declare_parameter('waypoint_names', Parameter.Type.STRING_ARRAY)
-        self.declare_parameter('arrival_radius_m', 0.5)
-        self.declare_parameter('max_linear_speed', 0.35)
-        self.declare_parameter('min_linear_speed', 0.06)
-        self.declare_parameter('max_angular_speed', 0.8)
-        self.declare_parameter('heading_kp', 1.4)
+        self.declare_parameter('arrival_radius_m', 0.1)
+        self.declare_parameter('max_linear_speed', 5.0)
+        self.declare_parameter('min_linear_speed', 0.5)
+        self.declare_parameter('max_angular_speed', 4.0)
+        self.declare_parameter('heading_kp', 1.2)
+        self.declare_parameter('lookahead_distance_m', 0.1)
         self.declare_parameter('slow_radius_m', 2.0)
         self.declare_parameter('large_heading_error_rad', 1.2)
         self.declare_parameter('control_rate_hz', 10.0)
@@ -50,6 +59,7 @@ class WaypointFollower(Node):
         self.min_linear_speed = float(self.get_parameter('min_linear_speed').value)
         self.max_angular_speed = float(self.get_parameter('max_angular_speed').value)
         self.heading_kp = float(self.get_parameter('heading_kp').value)
+        self.lookahead_distance_m = float(self.get_parameter('lookahead_distance_m').value)
         self.slow_radius_m = float(self.get_parameter('slow_radius_m').value)
         self.large_heading_error_rad = float(self.get_parameter('large_heading_error_rad').value)
         self.require_fix = bool(self.get_parameter('require_fix').value)
@@ -57,6 +67,12 @@ class WaypointFollower(Node):
 
         self.waypoints = self._load_waypoints()
         self.active_index = 0
+        self.path_points = []
+        self.segment_lengths = []
+        self.cumulative_lengths = []
+        self.total_path_length = 0.0
+        self.path_progress_s = 0.0
+        self.mission_completed = False
         self.origin = None
         self.latest_fix = None
         self.latest_xy = None
@@ -97,16 +113,20 @@ class WaypointFollower(Node):
         for param in params:
             if param.name == 'enabled':
                 enabled = bool(param.value)
-                if enabled and not self.enabled:
+                if enabled:
                     if waypoint_latitudes is not None or waypoint_longitudes is not None or waypoint_names is not None:
                         self.waypoints = self._waypoints_from_values(
                             waypoint_latitudes, waypoint_longitudes, waypoint_names)
                     else:
                         self.waypoints = self._load_waypoints()
                     self.active_index = 0
+                    self.path_progress_s = 0.0
+                    self.mission_completed = False
+                    self._rebuild_path_geometry()
                     self.get_logger().info(
                         'Navigation enabled, reloaded %d waypoints' % len(self.waypoints))
                 elif not enabled and self.enabled:
+                    self.mission_completed = False
                     self.cmd_pub.publish(Twist())
                     self.get_logger().info('Navigation disabled, stop published once')
                 self.enabled = enabled
@@ -120,6 +140,8 @@ class WaypointFollower(Node):
                 self.max_angular_speed = float(param.value)
             elif param.name == 'heading_kp':
                 self.heading_kp = float(param.value)
+            elif param.name == 'lookahead_distance_m':
+                self.lookahead_distance_m = float(param.value)
             elif param.name == 'slow_radius_m':
                 self.slow_radius_m = float(param.value)
             elif param.name == 'large_heading_error_rad':
@@ -135,6 +157,8 @@ class WaypointFollower(Node):
         if waypoint_latitudes is not None or waypoint_longitudes is not None or waypoint_names is not None:
             self.waypoints = self._waypoints_from_values(
                 waypoint_latitudes, waypoint_longitudes, waypoint_names)
+            self.active_index = min(self.active_index, max(0, len(self.waypoints) - 1))
+            self._rebuild_path_geometry()
         return SetParametersResult(successful=True)
 
     def _waypoints_from_values(self, latitudes=None, longitudes=None, names=None):
@@ -190,7 +214,7 @@ class WaypointFollower(Node):
 
         if self.origin is None:
             self.origin = (msg.latitude, msg.longitude)
-            self._publish_waypoint_path()
+            self._rebuild_path_geometry()
             self.get_logger().info(
                 'Set local ENU origin: lat=%.8f lon=%.8f' % self.origin)
 
@@ -231,7 +255,7 @@ class WaypointFollower(Node):
 
     def _control_loop(self):
         if not self.enabled:
-            self._publish_status('disabled')
+            self._publish_status('mission complete' if self.mission_completed else 'disabled')
             return
         if not self.waypoints:
             self._publish_stop('no waypoints configured')
@@ -243,9 +267,18 @@ class WaypointFollower(Node):
             self._publish_stop('GNSS no fix')
             return
         if self.active_index >= len(self.waypoints):
+            self.mission_completed = True
+            self.enabled = False
             self._publish_stop('mission complete')
             return
 
+        if len(self.waypoints) >= 2:
+            self._follow_path()
+            return
+
+        self._follow_single_waypoint()
+
+    def _follow_single_waypoint(self):
         target = self.waypoints[self.active_index]
         target_xy = latlon_to_enu(
             target.latitude, target.longitude, self.origin[0], self.origin[1])
@@ -271,7 +304,7 @@ class WaypointFollower(Node):
         heading_error = wrap_angle(target_bearing - heading)
         linear = self._linear_speed(distance, abs(heading_error))
         angular = max(-self.max_angular_speed,
-                      min(self.max_angular_speed, self.heading_kp * heading_error))
+                      min(self.max_angular_speed, -self.heading_kp * heading_error))
 
         cmd = Twist()
         cmd.linear.x = linear
@@ -281,6 +314,61 @@ class WaypointFollower(Node):
             'tracking %s %d/%d: distance=%.2fm heading_error=%.1fdeg v=%.2f w=%.2f source=%s'
             % (target.name, self.active_index + 1, len(self.waypoints), distance,
                math.degrees(heading_error), linear, angular, heading_source))
+
+    def _follow_path(self):
+        if not self.path_points or len(self.path_points) != len(self.waypoints):
+            self._rebuild_path_geometry()
+        if self.total_path_length <= 0.0:
+            self._follow_single_waypoint()
+            return
+
+        projection = self._project_onto_path(self.latest_xy)
+        self.path_progress_s = max(self.path_progress_s, projection.s)
+        remaining = max(0.0, self.total_path_length - self.path_progress_s)
+        final_xy = self.path_points[-1]
+        final_distance, _ = enu_distance_and_bearing(self.latest_xy, final_xy)
+
+        if final_distance <= self.arrival_radius_m and remaining <= max(
+                self.arrival_radius_m, self.lookahead_distance_m):
+            self.active_index = len(self.waypoints)
+            self.mission_completed = True
+            self.enabled = False
+            self._publish_target_fix_from_xy(final_xy)
+            self._publish_target_marker(final_xy, self.waypoints[-1].name)
+            self._publish_stop('mission complete')
+            return
+
+        target_s = min(self.total_path_length, self.path_progress_s + self.lookahead_distance_m)
+        target_xy = self._point_at_s(target_s)
+        self.active_index = min(self._waypoint_index_for_s(target_s), len(self.waypoints) - 1)
+        target_name = self.waypoints[self.active_index].name
+        target_distance, target_bearing = enu_distance_and_bearing(self.latest_xy, target_xy)
+
+        self._publish_target_fix_from_xy(target_xy)
+        self._publish_target_marker(target_xy, 'lookahead')
+        self.track_path_pub.publish(self.track_path)
+
+        heading, heading_source = self._select_heading()
+        if heading is None:
+            self._publish_stop('waiting for heading / COG / motion heading')
+            return
+
+        heading_error = wrap_angle(target_bearing - heading)
+        linear = self._linear_speed(remaining, abs(heading_error))
+        angular = max(-self.max_angular_speed,
+                      min(self.max_angular_speed, -self.heading_kp * heading_error))
+
+        cmd = Twist()
+        cmd.linear.x = linear
+        cmd.angular.z = angular
+        self.cmd_pub.publish(cmd)
+        self._publish_status(
+            'path_tracking %s %d/%d: distance=%.2fm heading_error=%.1fdeg '
+            'v=%.2f w=%.2f source=%s cross_track=%.2fm path_s=%.2fm remaining=%.2fm lookahead=%.2fm'
+            % (target_name, self.active_index + 1, len(self.waypoints), target_distance,
+               math.degrees(heading_error), linear, angular, heading_source,
+               projection.cross_track_error, self.path_progress_s, remaining,
+               self.lookahead_distance_m))
 
     def _select_heading(self):
         if self.true_heading is not None:
@@ -317,6 +405,98 @@ class WaypointFollower(Node):
         msg.latitude = waypoint.latitude
         msg.longitude = waypoint.longitude
         self.target_pub.publish(msg)
+
+    def _publish_target_fix_from_xy(self, xy):
+        lat, lon = enu_to_latlon(xy[0], xy[1], self.origin[0], self.origin[1])
+        msg = NavSatFix()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'gps'
+        msg.status.status = NavSatStatus.STATUS_FIX
+        msg.status.service = NavSatStatus.SERVICE_GPS
+        msg.latitude = lat
+        msg.longitude = lon
+        self.target_pub.publish(msg)
+
+    def _rebuild_path_geometry(self):
+        if self.origin is None:
+            return
+        self.path_points = [
+            latlon_to_enu(wp.latitude, wp.longitude, self.origin[0], self.origin[1])
+            for wp in self.waypoints
+        ]
+        self.segment_lengths = []
+        self.cumulative_lengths = [0.0]
+        total = 0.0
+        for start, end in zip(self.path_points[:-1], self.path_points[1:]):
+            length = math.hypot(end[0] - start[0], end[1] - start[1])
+            self.segment_lengths.append(length)
+            total += length
+            self.cumulative_lengths.append(total)
+        self.total_path_length = total
+        self.path_progress_s = min(self.path_progress_s, self.total_path_length)
+        self._publish_waypoint_path()
+
+    def _project_onto_path(self, xy):
+        best = None
+        min_s = max(0.0, self.path_progress_s - 0.5)
+        max_s = min(
+            self.total_path_length,
+            self.path_progress_s + max(2.0, self.lookahead_distance_m * 2.0),
+        )
+        for i, (start, end) in enumerate(zip(self.path_points[:-1], self.path_points[1:])):
+            length = self.segment_lengths[i]
+            if length <= 1e-6:
+                continue
+            vx = end[0] - start[0]
+            vy = end[1] - start[1]
+            wx = xy[0] - start[0]
+            wy = xy[1] - start[1]
+            t = max(0.0, min(1.0, (wx * vx + wy * vy) / (length * length)))
+            s = self.cumulative_lengths[i] + t * length
+            if s < min_s:
+                continue
+            if s > max_s:
+                continue
+            proj = (start[0] + t * vx, start[1] + t * vy)
+            err = math.hypot(xy[0] - proj[0], xy[1] - proj[1])
+            signed = err
+            cross = vx * (xy[1] - proj[1]) - vy * (xy[0] - proj[0])
+            if cross < 0.0:
+                signed = -err
+            if best is None or err < abs(best.cross_track_error):
+                best = PathProjection(s=s, xy=proj, cross_track_error=signed, segment_index=i)
+        if best is not None:
+            return best
+        final_xy = self.path_points[-1]
+        return PathProjection(
+            s=self.total_path_length,
+            xy=final_xy,
+            cross_track_error=math.hypot(xy[0] - final_xy[0], xy[1] - final_xy[1]),
+            segment_index=max(0, len(self.segment_lengths) - 1),
+        )
+
+    def _point_at_s(self, s):
+        s = max(0.0, min(self.total_path_length, s))
+        for i, length in enumerate(self.segment_lengths):
+            start_s = self.cumulative_lengths[i]
+            end_s = self.cumulative_lengths[i + 1]
+            if s <= end_s or i == len(self.segment_lengths) - 1:
+                if length <= 1e-6:
+                    return self.path_points[i]
+                ratio = (s - start_s) / length
+                start = self.path_points[i]
+                end = self.path_points[i + 1]
+                return (
+                    start[0] + ratio * (end[0] - start[0]),
+                    start[1] + ratio * (end[1] - start[1]),
+                )
+        return self.path_points[-1]
+
+    def _waypoint_index_for_s(self, s):
+        for i, waypoint_s in enumerate(self.cumulative_lengths):
+            if s <= waypoint_s:
+                return i
+        return len(self.waypoints) - 1
 
     def _publish_waypoint_path(self):
         if self.origin is None:

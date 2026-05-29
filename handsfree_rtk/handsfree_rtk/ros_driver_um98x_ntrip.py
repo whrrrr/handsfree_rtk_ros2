@@ -27,11 +27,11 @@ class NtripGnssNode(Node):
         self.declare_parameter('port', '/dev/HFRobotRTK')
         self.declare_parameter('baudrate', 115200)
         self.declare_parameter('frame_id', 'gps')
-        self.declare_parameter('ntrip_server', '120.253.239.161')
+        self.declare_parameter('ntrip_server', 'YOUR_NTRIP_SERVER')
         self.declare_parameter('ntrip_port', 8002)
-        self.declare_parameter('ntrip_username', 'ctea952')
-        self.declare_parameter('ntrip_password', 'cm286070')
-        self.declare_parameter('ntrip_mountpoint', 'RTCM33_GRCE')
+        self.declare_parameter('ntrip_username', 'YOUR_NTRIP_USERNAME')
+        self.declare_parameter('ntrip_password', 'YOUR_NTRIP_PASSWORD')
+        self.declare_parameter('ntrip_mountpoint', 'YOUR_NTRIP_MOUNTPOINT')
         self.declare_parameter('gga_period', 3.0)
         self.declare_parameter('serial_timeout', 1.0)
 
@@ -269,6 +269,7 @@ class NtripGnssNode(Node):
     def _publish_gnths_data(self, ths):
         heading = ths.get('heading')
         if heading is not None and ths.get('valid', False):
+            heading = (heading - 180.0) % 360.0
             self.heading_pub.publish(Float64(data=heading))
             self.get_logger().info('%s: heading=%.3f' % (ths.get('type', 'HEADING'), heading))
 
