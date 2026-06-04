@@ -146,15 +146,22 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     ids = parse_ids(args.driver_ids)
-    if len(ids) != 2:
-        raise SystemExit('--driver-ids must contain two ids, for example 1,2')
+    if not ids:
+        raise SystemExit('--driver-ids must contain at least one id, for example 1 or 1,2')
 
-    counts = {
-        (ids[0], 'left'): args.id1_left_counts if args.id1_left_counts is not None else args.counts,
-        (ids[0], 'right'): args.id1_right_counts if args.id1_right_counts is not None else args.counts,
-        (ids[1], 'left'): args.id2_left_counts if args.id2_left_counts is not None else args.counts,
-        (ids[1], 'right'): args.id2_right_counts if args.id2_right_counts is not None else args.counts,
-    }
+    counts = {}
+    for index, driver_id in enumerate(ids):
+        if index == 0:
+            left_counts = args.id1_left_counts
+            right_counts = args.id1_right_counts
+        elif index == 1:
+            left_counts = args.id2_left_counts
+            right_counts = args.id2_right_counts
+        else:
+            left_counts = None
+            right_counts = None
+        counts[(driver_id, 'left')] = left_counts if left_counts is not None else args.counts
+        counts[(driver_id, 'right')] = right_counts if right_counts is not None else args.counts
 
     print(
         'port=%s baud=%d ids=%s counts=%d max_rpm=%d current=%.1f/%.1fA'
